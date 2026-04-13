@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:apdcpp/admin_panel/layar_lupa_sandi_admin.dart';
 
 import 'package:apdcpp/admin_panel/layar_dashboard_admin.dart';
@@ -37,79 +37,80 @@ class _LayarLoginAdminState extends State<LayarLoginAdmin> {
       return;
     }
 
-    final koneksiTersedia = await _api.cekKoneksiServer();
-    if (!mounted) return;
-
-    if (!koneksiTersedia) {
-      await tampilkanDialogKoneksiInternet(context);
-      return;
-    }
-
+    debugPrint('--- Memulai Proses Login Admin ---');
     setState(() => _sedangLoading = true);
 
-    // Ambil device ID untuk single device login
-    final deviceId = await SingleDeviceSessionService.getDeviceId();
+    try {
+      debugPrint('Step 1: Cek koneksi server...');
+      final koneksiTersedia = await _api.cekKoneksiServer().timeout(const Duration(seconds: 10));
+      if (!koneksiTersedia) {
+        debugPrint('Koneksi server gagal.');
+        if (!mounted) return;
+        setState(() => _sedangLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Tidak dapat terhubung ke server base')),
+        );
+        return;
+      }
 
-    final response = await _api.loginAdmin(
-      username: username,
-      password: password,
-      deviceId: deviceId,
-      deviceName: 'Flutter App', // Bisa diubah dengan nama device yang lebih spesifik
-    );
-    if (!mounted) return;
+      debugPrint('Step 2: Mengambil Device ID...');
+      final deviceId = await SingleDeviceSessionService.getDeviceId().timeout(const Duration(seconds: 5), onTimeout: () => '');
 
-    setState(() => _sedangLoading = false);
+      debugPrint('Step 3: Mengirim request login ke API...');
+      final response = await _api.loginAdmin(
+        username: username,
+        password: password,
+        deviceId: deviceId,
+        deviceName: 'Flutter App',
+      ).timeout(const Duration(seconds: 20));
 
-    if (_api.isSuccess(response)) {
-      final data = _api.extractMapData(response);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Selamat datang, ${data['nama_lengkap'] ?? username}!'),
-        ),
-      );
-
-      // Simpan device ID untuk single device session
-      final deviceId = await SingleDeviceSessionService.getDeviceId();
-      await SingleDeviceSessionService.simpanDeviceIdSesi(deviceId);
-
-      await SesiAplikasiService.simpanSesi(
-        peran: 'admin',
-        username: data['username']?.toString() ?? username,
-        namaLengkap: data['nama_lengkap']?.toString() ?? 'Admin',
-        fotoProfil: data['foto_profil']?.toString(),
-        sessionToken: data['session_token']?.toString(),
-        peranAdmin: data['peran_admin']?.toString() ?? 'biasa',
-      );
-
+      debugPrint('Step 4: Response diterima: ${response['status']}');
       if (!mounted) return;
 
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(
-          builder: (_) => LayarDashboardAdmin(
-            namaLengkap: data['nama_lengkap']?.toString() ?? 'Admin',
-            username: data['username']?.toString() ?? username,
-            fotoProfil: data['foto_profil']?.toString(),
+      if (_api.isSuccess(response)) {
+        final data = _api.extractMapData(response);
+        await SesiAplikasiService.simpanSesi(
+          peran: 'admin',
+          username: username,
+          namaLengkap: data['nama_lengkap']?.toString() ?? username,
+          fotoProfil: data['foto_profil']?.toString(),
+          sessionToken: data['session_token']?.toString(),
+          deviceId: deviceId,
+        );
+
+        // Penting: Tandai sesi valid di perangkat ini
+        await SingleDeviceSessionService.simpanDeviceIdSesi(deviceId);
+
+        if (!mounted) return;
+        setState(() => _sedangLoading = false);
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => LayarDashboardAdmin(
+              namaLengkap: data['nama_lengkap']?.toString() ?? username,
+              username: username,
+            ),
           ),
-        ),
-        (_) => false,
+        );
+      } else {
+        setState(() => _sedangLoading = false);
+        if (response['status'] == 'terkunci') {
+          setState(() {
+            _akunTerkunci = true;
+          });
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_api.message(response))),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error Fatal Login: $e');
+      if (!mounted) return;
+      setState(() => _sedangLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Terjadi kesalahan: ${e.toString().contains('TimeoutException') ? 'Koneksi ke server terlalu lama' : e}')),
       );
-      return;
     }
-
-    if (response['status'] == 'terkunci') {
-      setState(() {
-        _akunTerkunci = true;
-      });
-    } else {
-      setState(() {
-        _akunTerkunci = false;
-      });
-    }
-
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(_api.message(response))));
   }
 
   @override

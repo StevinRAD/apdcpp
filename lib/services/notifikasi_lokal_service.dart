@@ -53,6 +53,7 @@ class NotifikasiLokalService {
 
   /// Request izin notifikasi (khusus iOS)
   static Future<bool> requestIzinNotifikasi() async {
+    if (kIsWeb) return true;
     if (Platform.isIOS) {
       final bool? result = await _notificationsPlugin
           .resolvePlatformSpecificImplementation<
@@ -70,6 +71,7 @@ class NotifikasiLokalService {
 
   /// Cek apakah izin notifikasi diberikan
   static Future<bool> cekIzinNotifikasi() async {
+    if (kIsWeb) return true;
     if (Platform.isAndroid) {
       // Android 13+ perlu cek izin
       final androidPlugin = _notificationsPlugin

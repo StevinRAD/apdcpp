@@ -22,7 +22,6 @@ class _LayarRequestIzinState extends State<LayarRequestIzin> {
     'notifikasi': false,
     'kamera': false,
     'galeri': false,
-    'penyimpanan': false,
   };
 
   Future<void> _requestSemuaIzin() async {
@@ -159,12 +158,6 @@ class _LayarRequestIzinState extends State<LayarRequestIzin> {
                   ),
                   const SizedBox(height: 12),
 
-                  _buildIzinItem(
-                    icon: Icons.storage,
-                    judul: 'Penyimpanan',
-                    deskripsi: 'Menyimpan dan mengambil file',
-                    status: _hasilIzin['penyimpanan'] ?? false,
-                  ),
                   const SizedBox(height: 32),
 
                   // Tombol

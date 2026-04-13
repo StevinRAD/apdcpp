@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -45,7 +46,6 @@ class IzinPerangkatService {
         'notifikasi': true,
         'kamera': true,
         'galeri': true,
-        'penyimpanan': true,
       };
     }
 
@@ -69,18 +69,6 @@ class IzinPerangkatService {
     hasil['galeri'] = await _requestIzinGaleri(context);
     if (!context.mounted) return hasil;
 
-    // Request izin penyimpanan (Android only)
-    if (Platform.isAndroid) {
-      hasil['penyimpanan'] = await _requestIzin(
-        context,
-        Permission.storage,
-        'Izin Penyimpanan Diperlukan',
-        'Aplikasi butuh akses penyimpanan untuk menyimpan dan mengambil file.',
-      );
-    } else {
-      hasil['penyimpanan'] = true; // iOS tidak perlu izin storage terpisah
-    }
-
     // Cek apakah semua izin diberikan
     final semuaDiberikan = hasil.values.every((e) => e);
 
@@ -93,6 +81,7 @@ class IzinPerangkatService {
 
   /// Request izin notifikasi
   static Future<bool> _requestIzinNotifikasi(BuildContext context) async {
+    if (kIsWeb) return true;
     // Untuk Android 13+ perlu request izin notifikasi
     if (Platform.isAndroid) {
       final androidInfo = await DeviceInfoPlugin().androidInfo;
@@ -110,6 +99,7 @@ class IzinPerangkatService {
 
   /// Request izin galeri/foto
   static Future<bool> _requestIzinGaleri(BuildContext context) async {
+    if (kIsWeb) return true;
     PermissionStatus status;
 
     if (Platform.isIOS) {
@@ -141,6 +131,7 @@ class IzinPerangkatService {
     String judul,
     String pesan,
   ) async {
+    if (kIsWeb) return true;
     final status = await permission.request();
 
     if (!context.mounted) return false;
@@ -200,6 +191,7 @@ class IzinPerangkatService {
 
   /// Request izin galeri saja (untuk use case spesifik)
   static Future<bool> pastikanAksesGaleri(BuildContext context) async {
+    if (kIsWeb) return true;
     if (!context.mounted) return false;
 
     PermissionStatus status;

@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 /// Service untuk mengelola single device session
 /// Memastikan hanya 1 device yang bisa aktif untuk 1 akun
@@ -24,7 +26,10 @@ class SingleDeviceSessionService {
 
     final deviceInfo = DeviceInfoPlugin();
 
-    if (Platform.isAndroid) {
+    if (kIsWeb) {
+      final webInfo = await deviceInfo.webBrowserInfo;
+      _cachedDeviceId = 'web_${webInfo.userAgent?.hashCode ?? DateTime.now().millisecondsSinceEpoch}';
+    } else if (Platform.isAndroid) {
       final androidInfo = await deviceInfo.androidInfo;
       _cachedDeviceId = androidInfo.id;
     } else if (Platform.isIOS) {

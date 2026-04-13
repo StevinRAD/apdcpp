@@ -434,11 +434,14 @@ class ApiApdService {
         return {'status': 'gagal', 'pesan': 'Username atau password salah'};
       }
 
+      debugPrint('Supabase: Mencari user $user di tabel karyawan...');
       final res = await _supabase
           .from('karyawan')
           .select()
           .eq('username', user)
-          .maybeSingle();
+          .maybeSingle()
+          .timeout(const Duration(seconds: 15));
+      debugPrint('Supabase: Cek user selesai.');
 
       if (res == null) {
         return {'status': 'gagal', 'pesan': 'Username atau password salah'};
@@ -452,7 +455,8 @@ class ApiApdService {
               .select('id')
               .eq('username', user)
               .eq('status', 'menunggu')
-              .maybeSingle();
+              .maybeSingle()
+              .timeout(const Duration(seconds: 10));
           if (pendingBanding != null) {
             return {
               'status': 'gagal',
@@ -492,7 +496,8 @@ class ApiApdService {
           await _supabase
               .from('karyawan')
               .update({'status': 'nonaktif'})
-              .eq('id', res['id']);
+              .eq('id', res['id'])
+              .timeout(const Duration(seconds: 10));
 
           final nama = _readText(res['nama_lengkap'], fallback: user);
           try {
@@ -542,17 +547,31 @@ class ApiApdService {
         }
       }
 
-      await _supabase
-          .from('karyawan')
-          .update(updateData)
-          .eq('id', res['id']);
+      debugPrint('Supabase: Mencoba update status login ke DB...');
+      try {
+        await _supabase
+            .from('karyawan')
+            .update(updateData)
+            .eq('id', res['id'])
+            .timeout(const Duration(seconds: 10));
+        debugPrint('Supabase: Update status login sukses.');
+      } catch (e) {
+        debugPrint('Supabase Error: Gagal update status login (abaikan): $e');
+        // Tetap lanjut meskipun update status gagal, agar user tetap bisa masuk
+      }
 
       // Ambil data karyawan yang sudah diupdate
-      final updatedRes = await _supabase
-          .from('karyawan')
-          .select()
-          .eq('id', res['id'])
-          .maybeSingle();
+      Map<String, dynamic>? updatedRes;
+      try {
+        updatedRes = await _supabase
+            .from('karyawan')
+            .select()
+            .eq('id', res['id'])
+            .maybeSingle()
+            .timeout(const Duration(seconds: 10));
+      } catch (e) {
+        debugPrint('Peringatan: Gagal mengambil data terbaru karyawan: $e');
+      }
 
       return {'status': 'sukses', 'pesan': 'Berhasil login', 'data': updatedRes ?? res};
     } catch (e) {
@@ -573,11 +592,14 @@ class ApiApdService {
         return {'status': 'gagal', 'pesan': 'Username atau password salah'};
       }
 
+      debugPrint('Supabase: Mencari user $user di tabel admin...');
       final res = await _supabase
           .from('admin')
           .select()
           .eq('username', user)
-          .maybeSingle();
+          .maybeSingle()
+          .timeout(const Duration(seconds: 15));
+      debugPrint('Supabase: Cek admin selesai.');
 
       if (res == null) {
         return {'status': 'gagal', 'pesan': 'Username atau password salah'};
@@ -594,7 +616,8 @@ class ApiApdService {
               .select('id,password_diingat')
               .eq('username', user)
               .eq('status', 'admin_gagal_login')
-              .maybeSingle();
+              .maybeSingle()
+              .timeout(const Duration(seconds: 10));
           final counterDb =
               int.tryParse(_readText(counterRow?['password_diingat'])) ?? 0;
           percobaan = math.max(percobaan, counterDb + 1);
@@ -662,17 +685,31 @@ class ApiApdService {
         }
       }
 
-      await _supabase
-          .from('admin')
-          .update(updateData)
-          .eq('id', res['id']);
+      debugPrint('Supabase: Mencoba update status login admin ke DB...');
+      try {
+        await _supabase
+            .from('admin')
+            .update(updateData)
+            .eq('id', res['id'])
+            .timeout(const Duration(seconds: 10));
+        debugPrint('Supabase: Update status login admin sukses.');
+      } catch (e) {
+        debugPrint('Supabase Error: Gagal update status login admin (abaikan): $e');
+        // Tetap lanjut meskipun update status gagal
+      }
 
       // Ambil data admin yang sudah diupdate
-      final updatedRes = await _supabase
-          .from('admin')
-          .select()
-          .eq('id', res['id'])
-          .maybeSingle();
+      Map<String, dynamic>? updatedRes;
+      try {
+        updatedRes = await _supabase
+            .from('admin')
+            .select()
+            .eq('id', res['id'])
+            .maybeSingle()
+            .timeout(const Duration(seconds: 10));
+      } catch (e) {
+        debugPrint('Peringatan: Gagal mengambil data terbaru admin: $e');
+      }
 
       return {'status': 'sukses', 'pesan': 'Berhasil login', 'data': updatedRes ?? res};
     } catch (e) {
