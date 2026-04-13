@@ -10,6 +10,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30  # Batasi maksimal 30 menit
 
     steps:
       - name: Checkout repository
@@ -25,7 +26,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
-          cache: true
+          cache: false  # Disable cache untuk menghindari corrupt cache
 
       - name: Flutter version
         run: flutter --version
@@ -39,6 +40,9 @@ jobs:
 
       - name: Build APK (Release)
         run: flutter build apk --release
+        env:
+          # Optimize gradle build
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.parallel=true -Dorg.gradle.jvmargs=-Xmx2048m"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
