@@ -52,6 +52,7 @@ class IzinPerangkatService {
     final hasil = <String, bool>{};
 
     // Request izin notifikasi
+    // ignore: use_build_context_synchronously
     hasil['notifikasi'] = await _requestIzinNotifikasi(context);
     if (!context.mounted) return hasil;
 
@@ -121,6 +122,9 @@ class IzinPerangkatService {
       }
     }
 
+    if (!context.mounted) return false;
+
+    // ignore: use_build_context_synchronously
     return _tanganiStatusIzin(
       context: context,
       status: status,
@@ -138,6 +142,10 @@ class IzinPerangkatService {
     String pesan,
   ) async {
     final status = await permission.request();
+
+    if (!context.mounted) return false;
+
+    // ignore: use_build_context_synchronously
     return _tanganiStatusIzin(
       context: context,
       status: status,
@@ -178,6 +186,9 @@ class IzinPerangkatService {
 
     final statusBaru = await Permission.camera.request();
 
+    if (!context.mounted) return false;
+
+    // ignore: use_build_context_synchronously
     return _tanganiStatusIzin(
       context: context,
       status: statusBaru,
