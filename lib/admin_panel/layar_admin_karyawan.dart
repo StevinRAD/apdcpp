@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 
 import 'package:apdcpp/services/apd_api_service.dart';
 import 'package:apdcpp/tema_aplikasi.dart';
+import 'package:apdcpp/konfigurasi_api.dart';
 
 class TabAdminKaryawan extends StatefulWidget {
   final GlobalKey? tutorialAksiKey;
@@ -1024,9 +1025,13 @@ class _TabAdminKaryawanState extends State<TabAdminKaryawan> {
             ),
           ),
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
+          GridView.count(
+            crossAxisCount: 4,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            mainAxisSpacing: 8,
+            crossAxisSpacing: 8,
+            childAspectRatio: 0.8,
             children: [
               _RingkasanKaryawanCard(
                 judul: 'Total Karyawan',
@@ -1075,6 +1080,9 @@ class _TabAdminKaryawanState extends State<TabAdminKaryawan> {
               final jabatan = item['jabatan']?.toString().trim();
               final departemen = item['departemen']?.toString().trim();
               final lokasiKerja = item['lokasi_kerja']?.toString().trim();
+              final fotoProfilUrl =
+                  buildUploadUrl(item['foto_profil']?.toString());
+
               return Card(
                 clipBehavior: Clip.antiAlias,
                 margin: const EdgeInsets.only(bottom: 10),
@@ -1090,6 +1098,38 @@ class _TabAdminKaryawanState extends State<TabAdminKaryawan> {
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            // FOTO PROFIL KARYAWAN
+                            Container(
+                              width: 58,
+                              height: 58,
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade100,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: Colors.grey.shade200,
+                                  width: 1,
+                                ),
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(14),
+                                child: fotoProfilUrl.isNotEmpty
+                                    ? Image.network(
+                                        fotoProfilUrl,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, _, _) => Icon(
+                                          Icons.person,
+                                          color: Colors.grey.shade400,
+                                          size: 30,
+                                        ),
+                                      )
+                                    : Icon(
+                                        Icons.person,
+                                        color: Colors.grey.shade400,
+                                        size: 30,
+                                      ),
+                              ),
+                            ),
+                            const SizedBox(width: 14),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1250,32 +1290,36 @@ class _RingkasanKaryawanCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 156,
-      padding: const EdgeInsets.all(14),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: warna.withValues(alpha: 0.14)),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(ikon, color: warna, size: 22),
-          const SizedBox(height: 10),
+          Icon(ikon, color: warna, size: 20),
+          const SizedBox(height: 8),
           Text(
             nilai,
             style: TextStyle(
-              fontSize: 24,
+              fontSize: 18,
               fontWeight: FontWeight.bold,
               color: warna,
+              height: 1,
             ),
           ),
-          const SizedBox(height: 2),
+          const SizedBox(height: 6),
           Text(
             judul,
+            textAlign: TextAlign.center,
             style: const TextStyle(
               color: TemaAplikasi.netral,
               fontWeight: FontWeight.w600,
+              fontSize: 9.5,
+              height: 1.1,
             ),
           ),
         ],

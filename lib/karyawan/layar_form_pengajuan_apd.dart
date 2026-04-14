@@ -105,9 +105,9 @@ class _LayarFormPengajuanApdState extends State<LayarFormPengajuanApd> {
 
       final result = await _picker.pickImage(
         source: source,
-        imageQuality: 70,
-        maxWidth: 1280,
-        maxHeight: 1280,
+        imageQuality: 50,
+        maxWidth: 1024,
+        maxHeight: 1024,
       );
       if (result == null) return;
       setState(() {

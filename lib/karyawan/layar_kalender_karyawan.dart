@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 
 import 'package:device_calendar/device_calendar.dart';
 import 'package:flutter/material.dart';
@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:apdcpp/services/apd_api_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class LayarKalenderKaryawan extends StatefulWidget {
   final String username;
@@ -28,6 +29,7 @@ class _LayarKalenderKaryawanState extends State<LayarKalenderKaryawan> {
 
   final Map<DateTime, List<_KalenderEvent>> _eventByDate = {};
   List<_KalenderEvent> _selectedEvents = [];
+  RealtimeChannel? _realtimeChannel;
 
   DateTime _tanggalOnly(DateTime date) =>
       DateTime(date.year, date.month, date.day);
@@ -36,8 +38,28 @@ class _LayarKalenderKaryawanState extends State<LayarKalenderKaryawan> {
 
   @override
   void initState() {
-    super.initState();
     _loadSemuaEvent();
+    _mulaiRealtimeKalender();
+  }
+
+  @override
+  void dispose() {
+    _realtimeChannel?.unsubscribe();
+    super.dispose();
+  }
+
+  void _mulaiRealtimeKalender() {
+    _realtimeChannel = _api.supabase
+        .channel('public:kalender_updates')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'kalender_perusahaan',
+          callback: (payload) {
+            _loadSemuaEvent();
+          },
+        )
+        .subscribe();
   }
 
   Future<void> _loadSemuaEvent() async {

@@ -390,9 +390,9 @@ class _TabAdminBeritaState extends State<TabAdminBerita> {
                                           final picked = await _picker
                                               .pickImage(
                                                 source: source,
-                                                imageQuality: 72,
-                                                maxWidth: 1280,
-                                                maxHeight: 1280,
+                                                imageQuality: 50,
+                                                maxWidth: 1024,
+                                                maxHeight: 1024,
                                               );
                                           if (picked == null ||
                                               !innerContext.mounted) {

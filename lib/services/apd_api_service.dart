@@ -13,6 +13,7 @@ class ApiApdService {
       <String, String>{};
 
   SupabaseClient get _supabase => Supabase.instance.client;
+  SupabaseClient get supabase => _supabase;
 
   bool isSuccess(Map<String, dynamic> response) =>
       (response['status']?.toString().toLowerCase() ?? '') == 'sukses';
@@ -386,6 +387,17 @@ class ApiApdService {
     } catch (e) {
       debugPrint('Upload error: $e');
       return null;
+    }
+  }
+
+  Future<void> _hapusFileStorage(String? path) async {
+    if (path == null || path.trim().isEmpty) return;
+    try {
+      final cleanPath = path.trim();
+      await _supabase.storage.from('uploads').remove([cleanPath]);
+      debugPrint('Berhasil menghapus file dari storage: $cleanPath');
+    } catch (e) {
+      debugPrint('Gagal menghapus file dari storage: $e');
     }
   }
 
@@ -801,6 +813,9 @@ class ApiApdService {
       };
       if (fotoPath != null) {
         updateData['foto_profil'] = fotoPath;
+        if (_readText(current['foto_profil']).isNotEmpty) {
+          await _hapusFileStorage(_readText(current['foto_profil']));
+        }
       }
 
       await _supabase
@@ -1317,11 +1332,25 @@ class ApiApdService {
         'is_aktif': isAktif == '1',
       };
 
+      final current = await _supabase
+          .from('apd')
+          .select('gambar_apd')
+          .eq('id', targetId)
+          .maybeSingle();
+
       if (gambarApd != null) {
         final imgPath = await _uploadFile(gambarApd, 'apd');
-        if (imgPath != null) updateData['gambar_apd'] = imgPath;
+        if (imgPath != null) {
+          updateData['gambar_apd'] = imgPath;
+          if (current != null && _readText(current['gambar_apd']).isNotEmpty) {
+            await _hapusFileStorage(_readText(current['gambar_apd']));
+          }
+        }
       } else if (hapusGambar) {
         updateData['gambar_apd'] = null; // Remove image
+        if (current != null && _readText(current['gambar_apd']).isNotEmpty) {
+          await _hapusFileStorage(_readText(current['gambar_apd']));
+        }
       }
 
       await _supabase.from('apd').update(updateData).eq('id', targetId);
@@ -1337,7 +1366,17 @@ class ApiApdService {
       if (targetId.isEmpty || targetId.toLowerCase() == 'null') {
         return {'status': 'gagal', 'pesan': 'ID APD tidak valid'};
       }
+      final current = await _supabase
+          .from('apd')
+          .select('gambar_apd')
+          .eq('id', targetId)
+          .maybeSingle();
+
       await _supabase.from('apd').delete().eq('id', targetId);
+
+      if (current != null && _readText(current['gambar_apd']).isNotEmpty) {
+        await _hapusFileStorage(_readText(current['gambar_apd']));
+      }
       return {'status': 'sukses', 'pesan': 'APD berhasil dihapus'};
     } catch (e) {
       return {'status': 'gagal', 'pesan': 'Error: $e'};
@@ -1412,6 +1451,54 @@ class ApiApdService {
           .eq('id', targetId)
           .eq('id_karyawan', karyawan['id']);
       return {'status': 'sukses', 'pesan': 'Berhasil'};
+    } catch (e) {
+      return {'status': 'gagal', 'pesan': 'Error: $e'};
+    }
+  }
+
+  Future<Map<String, dynamic>> hapusNotifikasi({
+    required String idNotifikasi,
+    required String username,
+  }) async {
+    try {
+      final targetId = idNotifikasi.trim();
+      if (targetId.isEmpty || targetId.toLowerCase() == 'null') {
+        return {'status': 'gagal', 'pesan': 'ID notifikasi tidak valid'};
+      }
+      final karyawan = await _supabase
+          .from('karyawan')
+          .select('id')
+          .eq('username', username)
+          .maybeSingle();
+      if (karyawan == null) {
+        return {'status': 'gagal', 'pesan': 'Data karyawan tidak ditemukan'};
+      }
+      await _supabase
+          .from('notifikasi_karyawan')
+          .delete()
+          .eq('id', targetId)
+          .eq('id_karyawan', karyawan['id']);
+      return {'status': 'sukses', 'pesan': 'Notifikasi berhasil dihapus'};
+    } catch (e) {
+      return {'status': 'gagal', 'pesan': 'Error: $e'};
+    }
+  }
+
+  Future<Map<String, dynamic>> hapusSemuaNotifikasi(String username) async {
+    try {
+      final karyawan = await _supabase
+          .from('karyawan')
+          .select('id')
+          .eq('username', username)
+          .maybeSingle();
+      if (karyawan == null) {
+        return {'status': 'gagal', 'pesan': 'Data karyawan tidak ditemukan'};
+      }
+      await _supabase
+          .from('notifikasi_karyawan')
+          .delete()
+          .eq('id_karyawan', karyawan['id']);
+      return {'status': 'sukses', 'pesan': 'Semua notifikasi berhasil dihapus'};
     } catch (e) {
       return {'status': 'gagal', 'pesan': 'Error: $e'};
     }
@@ -2716,7 +2803,19 @@ class ApiApdService {
       if (!isEdit) {
         await _supabase.from('berita').insert(data);
       } else {
+        final current = await _supabase
+            .from('berita')
+            .select('gambar_berita')
+            .eq('id', targetId)
+            .maybeSingle();
+
         await _supabase.from('berita').update(data).eq('id', targetId);
+
+        if ((img != null || hapusGambar) &&
+            current != null &&
+            _readText(current['gambar_berita']).isNotEmpty) {
+          await _hapusFileStorage(_readText(current['gambar_berita']));
+        }
       }
 
       if (kirimNotifikasi && isAktif) {
@@ -2745,7 +2844,17 @@ class ApiApdService {
       if (targetId.isEmpty || targetId.toLowerCase() == 'null') {
         return {'status': 'gagal', 'pesan': 'ID berita tidak valid'};
       }
+      final current = await _supabase
+          .from('berita')
+          .select('gambar_berita')
+          .eq('id', targetId)
+          .maybeSingle();
+
       await _supabase.from('berita').delete().eq('id', targetId);
+
+      if (current != null && _readText(current['gambar_berita']).isNotEmpty) {
+        await _hapusFileStorage(_readText(current['gambar_berita']));
+      }
       return {'status': 'sukses'};
     } catch (e) {
       return {'status': 'gagal', 'pesan': 'Error: $e'};
@@ -3272,12 +3381,12 @@ class ApiApdService {
             .eq('username', username)
             .maybeSingle();
         if (admin == null) {
-          return {'status': 'gagal', 'pesan': 'Akun admin tidak ditemukan'};
+          return {'status': 'expired', 'pesan': 'Akun admin tidak ditemukan'};
         }
         // Cek session token
         final dbToken = _readText(admin['session_token']);
         if (dbToken != sessionToken) {
-          return {'status': 'gagal', 'pesan': 'Session tidak valid'};
+          return {'status': 'expired', 'pesan': 'Session tidak valid'};
         }
         // Update last_active
         await _supabase
@@ -3293,22 +3402,22 @@ class ApiApdService {
           .eq('username', username)
           .maybeSingle();
       if (karyawan == null) {
-        return {'status': 'gagal', 'pesan': 'Akun karyawan tidak ditemukan'};
+        return {'status': 'expired', 'pesan': 'Akun karyawan tidak ditemukan'};
       }
       // Cek session token
       final dbToken = _readText(karyawan['session_token']);
       if (dbToken != sessionToken) {
-        return {'status': 'gagal', 'pesan': 'Session tidak valid'};
+        return {'status': 'expired', 'pesan': 'Session tidak valid'};
       }
       final status = _normalizeStatus(karyawan['status']?.toString());
       if (status == 'nonaktif') {
-        return {'status': 'gagal', 'pesan': 'Akun karyawan nonaktif'};
+        return {'status': 'expired', 'pesan': 'Akun karyawan nonaktif'};
       }
       if (status == 'ban_sementara') {
         final bannedUntil = _parseDate(karyawan['banned_until']);
         if (bannedUntil != null && DateTime.now().isBefore(bannedUntil)) {
           return {
-            'status': 'gagal',
+            'status': 'expired',
             'pesan': 'Akun sedang dibatasi sementara',
           };
         }
@@ -3320,7 +3429,7 @@ class ApiApdService {
           .eq('id', karyawan['id']);
       return {'status': 'sukses'};
     } catch (e) {
-      return {'status': 'gagal', 'pesan': 'Gagal validasi sesi: $e'};
+      return {'status': 'error', 'pesan': 'Gagal validasi sesi: $e'};
     }
   }
 
@@ -3492,6 +3601,9 @@ class ApiApdService {
       };
       if (fotoPath != null) {
         updateData['foto_profil'] = fotoPath;
+        if (_readText(current['foto_profil']).isNotEmpty) {
+          await _hapusFileStorage(_readText(current['foto_profil']));
+        }
       }
 
       final p1 = _readText(pertanyaan1);

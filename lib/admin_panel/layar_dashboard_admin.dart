@@ -1,9 +1,10 @@
-﻿import 'dart:math' as math;
+import 'dart:math' as math;
 
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:apdcpp/konfigurasi_api.dart';
 import 'package:apdcpp/admin_panel/layar_admin_berita.dart';
@@ -59,7 +60,7 @@ class _LayarDashboardAdminState extends State<LayarDashboardAdmin> {
   final GlobalKey _tutorialAdminProfilTabKey = GlobalKey();
 
   Timer? _sesiTimer;
-  Timer? _notifikasiTimer;
+  RealtimeChannel? _realtimeChannel;
   int _notifikasiTerakhirCount = 0;
   final ApiApdService _api = const ApiApdService();
   @override
@@ -70,7 +71,7 @@ class _LayarDashboardAdminState extends State<LayarDashboardAdmin> {
     _fotoProfil = widget.fotoProfil;
     _cekTutorialAdminPertamaKali();
     _mulaiCekSesi();
-    _mulaiPollingNotifikasi();
+    _mulaiRealtimeNotifikasi();
   }
 
   void _mulaiCekSesi() {
@@ -89,75 +90,73 @@ class _LayarDashboardAdminState extends State<LayarDashboardAdmin> {
 
       if (!mounted) return;
 
-      if (res['status'] == 'gagal' || res['status'] == 'expired') {
+      if (res['status'] == 'expired') {
         _sesiTimer?.cancel();
         _paksaLogout();
       }
     });
   }
 
-  void _mulaiPollingNotifikasi() {
-    // Polling notifikasi setiap 20 detik
-    _notifikasiTimer = Timer.periodic(const Duration(seconds: 20), (_) async {
-      if (!mounted) return;
+  void _mulaiRealtimeNotifikasi() {
+    // Berhenti jika sudah ada channel aktif
+    _realtimeChannel?.unsubscribe();
 
-      // Cek dashboard untuk pengajuan baru
-      final response = await _api.dashboardAdmin(_username);
+    // Buat channel baru untuk memantau data pengajuan secara instan
+    _realtimeChannel = _api.supabase
+        .channel('public:pengajuan_admin')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'pengajuan',
+          callback: (payload) async {
+            if (!mounted) return;
 
-      if (_api.isSuccess(response) && mounted) {
-        final data = _api.extractMapData(response);
-        final pengajuanMenunggu =
-            int.tryParse('${data['jumlah_pengajuan'] ?? 0}') ?? 0;
-
-        // Jika ada pengajuan baru dan bukan pertama kali
-        if (pengajuanMenunggu > _notifikasiTerakhirCount &&
-            _notifikasiTerakhirCount > 0) {
-          await NotifikasiLokalService.tampilkanNotifikasi(
-            id: DateTime.now().millisecondsSinceEpoch % 100000,
-            judul: 'Pengajuan Baru',
-            isi: 'Ada $pengajuanMenunggu pengajuan yang menunggu persetujuan',
-            payload: 'pengajuan_baru_admin',
-          );
-        }
-
-        if (mounted) {
-          _notifikasiTerakhirCount = pengajuanMenunggu;
-        }
-      }
-    });
+            // Trigger notifikasi instan
+            await NotifikasiLokalService.tampilkanNotifikasi(
+              id: DateTime.now().millisecondsSinceEpoch % 100000,
+              judul: 'Pengajuan APD Baru',
+              isi: 'Seorang karyawan baru saja mengirimkan pengajuan APD.',
+              payload: 'pengajuan_baru_admin',
+            );
+          },
+        )
+        .subscribe();
   }
 
   void _paksaLogout() {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => AlertDialog(
-        title: const Text(
-          'Sesi Berakhir',
-          style: TextStyle(color: TemaAplikasi.bahaya),
-        ),
-        content: const Text(
-          'Akun sedang digunakan di device berbeda atau sesi telah berakhir. Silakan login kembali.',
-        ),
-        actions: [
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: TemaAplikasi.bahaya,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () async {
-              await SesiAplikasiService.hapusSesi();
-              if (mounted) {
-                Navigator.pushAndRemoveUntil(
-                  context,
-                  MaterialPageRoute(builder: (_) => const LayarPilihPeran()),
-                  (_) => false,
-                );
-              }
-            },
-            child: const Text('Tutup'),
+      builder: (_) => PopScope(
+        canPop: false, // Menghalangi tombol kembali untuk menutup dialog ini
+        child: AlertDialog(
+          title: const Text(
+            'Sesi Berakhir',
+            style: TextStyle(color: TemaAplikasi.bahaya),
           ),
-        ],
+          content: const Text(
+            'Akun sedang digunakan di device berbeda atau sesi telah berakhir. Silakan login kembali.',
+          ),
+          actions: [
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: TemaAplikasi.bahaya,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () async {
+                await SesiAplikasiService.hapusSesi();
+                if (mounted) {
+                  Navigator.pushAndRemoveUntil(
+                    context,
+                    MaterialPageRoute(builder: (_) => const LayarPilihPeran()),
+                    (_) => false,
+                  );
+                }
+              },
+              child: const Text('Tutup'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -365,7 +364,7 @@ class _LayarDashboardAdminState extends State<LayarDashboardAdmin> {
   @override
   void dispose() {
     _sesiTimer?.cancel();
-    _notifikasiTimer?.cancel();
+    _realtimeChannel?.unsubscribe();
     super.dispose();
   }
 

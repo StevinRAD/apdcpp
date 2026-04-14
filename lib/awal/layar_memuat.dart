@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import 'package:apdcpp/admin_panel/layar_dashboard_admin.dart';
 import 'package:apdcpp/awal/layar_pilih_peran.dart';
@@ -40,38 +40,58 @@ class _LayarMemuatState extends State<LayarMemuat> {
       return;
     }
 
-    final dataSesi = resultList[1] as Map<String, String>?;
+    final dataSesi = resultList[1] as Map<String, dynamic>?;
+    bool sesiValid = false;
 
     if (dataSesi != null) {
-      final peran = dataSesi['peran'];
-      final username = dataSesi['username']!;
-      final namaLengkap = dataSesi['nama_lengkap']!;
-      final fotoProfil = dataSesi['foto_profil'];
+      final peran = dataSesi['peran']?.toString();
+      final username = dataSesi['username']?.toString() ?? '';
+      final token = dataSesi['session_token']?.toString();
 
-      if (peran == 'admin') {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => LayarDashboardAdmin(
-              username: username,
-              namaLengkap: namaLengkap,
-              fotoProfil: fotoProfil,
-            ),
-          ),
+      if (token != null && peran != null) {
+        // Cek validitas sesi ke server
+        final res = await _api.cekSesi(
+          peran: peran,
+          username: username,
+          sessionToken: token,
         );
-        return;
-      } else if (peran == 'karyawan') {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => LayarDashboardKaryawan(
-              username: username,
-              namaLengkap: namaLengkap,
-              fotoProfil: fotoProfil,
+        if (res['status'] == 'sukses') {
+          sesiValid = true;
+        } else {
+          // Sesi tidak valid lagi (expired atau di-kick device lain)
+          await SesiAplikasiService.hapusSesi();
+        }
+      }
+
+      if (sesiValid) {
+        final namaLengkap = dataSesi['nama_lengkap']?.toString() ?? '';
+        final fotoProfil = dataSesi['foto_profil']?.toString();
+
+        if (peran == 'admin') {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => LayarDashboardAdmin(
+                username: username,
+                namaLengkap: namaLengkap,
+                fotoProfil: fotoProfil,
+              ),
             ),
-          ),
-        );
-        return;
+          );
+          return;
+        } else if (peran == 'karyawan') {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => LayarDashboardKaryawan(
+                username: username,
+                namaLengkap: namaLengkap,
+                fotoProfil: fotoProfil,
+              ),
+            ),
+          );
+          return;
+        }
       }
     }
 

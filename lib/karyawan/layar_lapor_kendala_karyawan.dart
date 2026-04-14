@@ -125,9 +125,9 @@ class _LayarLaporKendalaKaryawanState extends State<LayarLaporKendalaKaryawan>
     final picker = ImagePicker();
     final picked = await picker.pickImage(
       source: source,
-      imageQuality: 70,
-      maxWidth: 1280,
-      maxHeight: 1280,
+      imageQuality: 50,
+      maxWidth: 1024,
+      maxHeight: 1024,
     );
     if (picked != null && mounted) {
       setState(() => _fotoLaporan = File(picked.path));
@@ -143,18 +143,10 @@ class _LayarLaporKendalaKaryawanState extends State<LayarLaporKendalaKaryawan>
           children: [
             ListTile(
               leading: const Icon(Icons.camera_alt_outlined),
-              title: const Text('Kamera'),
+              title: const Text('Ambil Foto (Kamera)'),
               onTap: () {
                 Navigator.pop(context);
                 _pilihFoto(ImageSource.camera);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('Galeri'),
-              onTap: () {
-                Navigator.pop(context);
-                _pilihFoto(ImageSource.gallery);
               },
             ),
             if (_fotoLaporan != null)
@@ -501,7 +493,7 @@ class _LayarLaporKendalaKaryawanState extends State<LayarLaporKendalaKaryawan>
                           ),
                           SizedBox(height: 8),
                           Text(
-                            'Ketuk untuk tambah foto\n(kamera / galeri)',
+                            'Ketuk untuk ambil foto\n(Kamera)',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: TemaAplikasi.netral,

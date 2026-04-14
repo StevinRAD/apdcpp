@@ -22,10 +22,6 @@ class _LayarNotifikasiKaryawanState extends State<LayarNotifikasiKaryawan> {
   bool _loading = true;
   bool _preferensiSiap = false;
   List<Map<String, dynamic>> _items = [];
-  Set<String> _hiddenIds = <String>{};
-
-  String get _hiddenStorageKey =>
-      'notifikasi_karyawan_hidden_${widget.username}';
 
   @override
   void initState() {
@@ -34,16 +30,7 @@ class _LayarNotifikasiKaryawanState extends State<LayarNotifikasiKaryawan> {
   }
 
   Future<void> _pastikanPreferensiSiap() async {
-    if (_preferensiSiap) return;
-    final prefs = await SharedPreferences.getInstance();
-    _hiddenIds = (prefs.getStringList(_hiddenStorageKey) ?? const <String>[])
-        .toSet();
     _preferensiSiap = true;
-  }
-
-  Future<void> _simpanHiddenIds() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(_hiddenStorageKey, _hiddenIds.toList()..sort());
   }
 
   Future<void> _loadData() async {
@@ -55,12 +42,7 @@ class _LayarNotifikasiKaryawanState extends State<LayarNotifikasiKaryawan> {
 
     if (_api.isSuccess(response)) {
       setState(() {
-        _items = _api
-            .extractListData(response)
-            .where(
-              (item) => !_hiddenIds.contains('${item['id_notifikasi'] ?? ''}'),
-            )
-            .toList();
+        _items = _api.extractListData(response);
         _loading = false;
       });
       return;
@@ -93,16 +75,28 @@ class _LayarNotifikasiKaryawanState extends State<LayarNotifikasiKaryawan> {
     final id = '${item['id_notifikasi'] ?? ''}';
     if (id.isEmpty) return;
 
+    final response = await _api.hapusNotifikasi(
+      idNotifikasi: id,
+      username: widget.username,
+    );
+
+    if (!_api.isSuccess(response)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_api.message(response))));
+      return;
+    }
+
     setState(() {
-      _hiddenIds.add(id);
       _items = _items
           .where((e) => '${e['id_notifikasi'] ?? ''}' != id)
           .toList();
     });
-    await _simpanHiddenIds();
+
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Notifikasi dihapus dari perangkat ini')),
+      const SnackBar(content: Text('Notifikasi telah dihapus permanently')),
     );
   }
 
@@ -114,7 +108,7 @@ class _LayarNotifikasiKaryawanState extends State<LayarNotifikasiKaryawan> {
       builder: (dialogContext) => AlertDialog(
         title: const Text('Hapus Semua Notifikasi'),
         content: const Text(
-          'Semua notifikasi akan disembunyikan dari perangkat ini. Lanjutkan?',
+          'Semua notifikasi Anda akan dihapus permanen dari database. Lanjutkan?',
         ),
         actions: [
           TextButton(
@@ -135,19 +129,22 @@ class _LayarNotifikasiKaryawanState extends State<LayarNotifikasiKaryawan> {
 
     if (confirm != true) return;
 
+    final response = await _api.hapusSemuaNotifikasi(widget.username);
+    if (!_api.isSuccess(response)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_api.message(response))));
+      return;
+    }
+
     setState(() {
-      for (final item in _items) {
-        final id = '${item['id_notifikasi'] ?? ''}';
-        if (id.isNotEmpty) _hiddenIds.add(id);
-      }
       _items = [];
     });
-    await _simpanHiddenIds();
+
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Semua notifikasi dihapus dari perangkat ini'),
-      ),
+      const SnackBar(content: Text('Semua notifikasi telah dihapus permanen')),
     );
   }
 
@@ -246,7 +243,7 @@ class _LayarNotifikasiKaryawanState extends State<LayarNotifikasiKaryawan> {
                       ),
                       child: const Text(
                         'Ketuk notifikasi untuk menandai sudah dibaca. '
-                        'Tombol hapus hanya menyembunyikan dari perangkat ini.',
+                        'Tombol hapus akan menghapus data permanen dari database.',
                         style: TextStyle(height: 1.4, fontSize: 12),
                       ),
                     );

@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:apdcpp/konfigurasi_api.dart';
 import 'package:apdcpp/services/apd_api_service.dart';
 import 'package:apdcpp/services/izin_perangkat_service.dart';
+import 'package:image_cropper/image_cropper.dart';
 
 class LayarEditProfilAdmin extends StatefulWidget {
   final String username;
@@ -113,30 +114,81 @@ class _LayarEditProfilAdminState extends State<LayarEditProfilAdmin> {
 
     setState(() => _pickingImage = true);
     try {
-      final izin = await IzinPerangkatService.pastikanAksesGaleri(context);
+      final source = await showModalBottomSheet<ImageSource>(
+        context: context,
+        builder: (ctx) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.camera_alt_outlined),
+                title: const Text('Ambil dari Kamera'),
+                onTap: () => Navigator.pop(ctx, ImageSource.camera),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined),
+                title: const Text('Pilih dari Galeri'),
+                onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      if (source == null || !mounted) {
+        setState(() => _pickingImage = false);
+        return;
+      }
+
+      final izin = source == ImageSource.camera
+          ? await IzinPerangkatService.pastikanAksesKamera(context)
+          : await IzinPerangkatService.pastikanAksesGaleri(context);
+
       if (!mounted || !izin) {
-        if (mounted) {
-          setState(() => _pickingImage = false);
-        }
+        setState(() => _pickingImage = false);
         return;
       }
 
       final picked = await _picker.pickImage(
-        source: ImageSource.gallery,
+        source: source,
         imageQuality: 70,
-        maxWidth: 960,
-        maxHeight: 960,
+        maxWidth: 1024,
+        maxHeight: 1024,
       );
+
       if (!mounted) return;
       if (picked == null) {
         setState(() => _pickingImage = false);
         return;
       }
 
-      setState(() {
-        _fotoBaru = File(picked.path);
-        _pickingImage = false;
-      });
+      final cropped = await ImageCropper().cropImage(
+        sourcePath: picked.path,
+        uiSettings: [
+          AndroidUiSettings(
+            toolbarTitle: 'Potong Foto Profil Admin',
+            toolbarColor: const Color(0xFFD2A92B),
+            toolbarWidgetColor: Colors.white,
+            initAspectRatio: CropAspectRatioPreset.square,
+            lockAspectRatio: true,
+            aspectRatioPresets: [CropAspectRatioPreset.square],
+          ),
+          IOSUiSettings(
+            title: 'Potong Foto Profil Admin',
+            aspectRatioLockEnabled: true,
+            aspectRatioPresets: [CropAspectRatioPreset.square],
+          ),
+        ],
+      );
+
+      if (cropped != null && mounted) {
+        setState(() {
+          _fotoBaru = File(cropped.path);
+          _pickingImage = false;
+        });
+      } else {
+        setState(() => _pickingImage = false);
+      }
     } on PlatformException catch (e) {
       if (!mounted) return;
       setState(() => _pickingImage = false);
@@ -346,7 +398,7 @@ class _LayarEditProfilAdminState extends State<LayarEditProfilAdmin> {
                   const SizedBox(height: 8),
                   Text(
                     _pickingImage
-                        ? 'Membuka galeri...'
+                        ? 'Sedang memuat...'
                         : 'Tap foto untuk ganti foto profil',
                   ),
                   const SizedBox(height: 14),

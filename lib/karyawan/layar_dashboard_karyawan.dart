@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -20,6 +21,7 @@ import 'package:apdcpp/tema_aplikasi.dart';
 import 'package:apdcpp/widgets/dialog_tutorial_aplikasi.dart';
 import 'package:apdcpp/services/single_device_session_service.dart';
 import 'package:apdcpp/services/notifikasi_lokal_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class LayarDashboardKaryawan extends StatefulWidget {
   final String namaLengkap;
@@ -62,7 +64,7 @@ class _LayarDashboardKaryawanState extends State<LayarDashboardKaryawan> {
   int _notifBelumDibaca = 0;
 
   Timer? _sesiTimer;
-  Timer? _notifikasiTimer;
+  RealtimeChannel? _realtimeChannel;
   int _notifikasiTerakhirCount = 0;
 
   @override
@@ -74,7 +76,16 @@ class _LayarDashboardKaryawanState extends State<LayarDashboardKaryawan> {
     _loadDashboard();
     _cekTutorialKaryawanPertamaKali();
     _mulaiCekSesi();
-    _mulaiPollingNotifikasi();
+    _mulaiRealtimeNotifikasi();
+  }
+
+  @override
+  void dispose() {
+    _sesiTimer?.cancel();
+    _beritaAutoSlideTimer?.cancel();
+    _beritaPageController.dispose();
+    _realtimeChannel?.unsubscribe();
+    super.dispose();
   }
 
   void _mulaiCekSesi() {
@@ -93,81 +104,116 @@ class _LayarDashboardKaryawanState extends State<LayarDashboardKaryawan> {
 
       if (!mounted) return;
 
-      if (res['status'] == 'gagal' || res['status'] == 'expired') {
+      if (res['status'] == 'expired') {
         _sesiTimer?.cancel();
         _paksaLogout();
       }
     });
   }
 
-  void _mulaiPollingNotifikasi() {
-    // Polling notifikasi setiap 20 detik
-    _notifikasiTimer = Timer.periodic(const Duration(seconds: 20), (_) async {
-      final sesi = await SesiAplikasiService.ambilSesi();
-      if (sesi == null || !mounted) return;
+  void _mulaiRealtimeNotifikasi() async {
+    _realtimeChannel?.unsubscribe();
 
-      // Ambil data notifikasi terbaru
-      final response = await _api.dashboardKaryawan(_username);
-      if (!mounted) return;
+    // Pastikan session ada untuk ambil ID Karyawan untuk filter realtime
+    final sesi = await SesiAplikasiService.ambilSesi();
+    if (sesi == null || !mounted) return;
+    final String? idKaryawan = sesi['user_id']?.toString();
+    if (idKaryawan == null) return;
 
-      if (_api.isSuccess(response)) {
-        final data = _api.extractMapData(response);
-        final notifBaru =
-            int.tryParse('${data['notifikasi_belum_dibaca'] ?? 0}') ?? 0;
+    _realtimeChannel = _api.supabase.channel('public:karyawan_updates');
 
-        // Cek apakah ada notifikasi baru
-        if (notifBaru > _notifikasiTerakhirCount &&
-            _notifikasiTerakhirCount > 0) {
-          final selisih = notifBaru - _notifikasiTerakhirCount;
+    // Listener 1: Notifikasi Personal Karyawan
+    _realtimeChannel?.onPostgresChanges(
+      event: PostgresChangeEvent.insert,
+      schema: 'public',
+      table: 'notifikasi_karyawan',
+      filter: PostgresChangeFilter(
+        type: PostgresChangeFilterType.eq,
+        column: 'id_karyawan',
+        value: idKaryawan,
+      ),
+      callback: (payload) async {
+        if (!mounted) return;
+        final dataJson = payload.newRecord['isi']?.toString() ?? '{}';
+        Map<String, dynamic> isiMap = {};
+        try {
+          isiMap = Map<String, dynamic>.from(jsonDecode(dataJson));
+        } catch (_) {}
+
+        final judul = isiMap['judul'] ?? 'Notifikasi Baru';
+        final pesan = isiMap['pesan'] ?? 'Ada pembaruan data untuk Anda.';
+
+        await NotifikasiLokalService.tampilkanNotifikasi(
+          id: DateTime.now().millisecondsSinceEpoch % 100000,
+          judul: judul,
+          isi: pesan,
+          payload: 'notifikasi_baru',
+        );
+        _loadDashboard();
+      },
+    );
+
+    // Listener 2: Update Kalender Perusahaan
+    _realtimeChannel?.onPostgresChanges(
+      event: PostgresChangeEvent.all,
+      schema: 'public',
+      table: 'kalender_perusahaan',
+      callback: (payload) async {
+        if (!mounted) return;
+        
+        // Jika ada penambahan baru, munculkan notifikasi
+        if (payload.eventType == PostgresChangeEvent.insert) {
+          final judul = payload.newRecord['judul']?.toString() ?? 'Agenda Baru';
           await NotifikasiLokalService.tampilkanNotifikasi(
             id: DateTime.now().millisecondsSinceEpoch % 100000,
-            judul: 'Notifikasi Baru',
-            isi: 'Anda memiliki $selisih notifikasi baru. Cek sekarang!',
-            payload: 'notifikasi_baru',
+            judul: 'Agenda Perusahaan Baru',
+            isi: 'Ada agenda baru: $judul. Cek kalender Anda.',
+            payload: 'kalender_baru',
           );
         }
+        
+        // Selalu refresh dashboard agar info kalender terbaru muncul
+        _loadDashboard();
+      },
+    );
 
-        if (mounted) {
-          setState(() {
-            _notifBelumDibaca = notifBaru;
-            _notifikasiTerakhirCount = notifBaru;
-          });
-        }
-      }
-    });
+    _realtimeChannel?.subscribe();
   }
 
   void _paksaLogout() {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => AlertDialog(
-        title: const Text(
-          'Sesi Berakhir',
-          style: TextStyle(color: TemaAplikasi.bahaya),
-        ),
-        content: const Text(
-          'Akun sedang digunakan di device berbeda atau sesi telah berakhir. Silakan login kembali.',
-        ),
-        actions: [
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: TemaAplikasi.bahaya,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () async {
-              await SesiAplikasiService.hapusSesi();
-              if (mounted) {
-                Navigator.pushAndRemoveUntil(
-                  context,
-                  MaterialPageRoute(builder: (_) => const LayarPilihPeran()),
-                  (_) => false,
-                );
-              }
-            },
-            child: const Text('Tutup'),
+      builder: (_) => PopScope(
+        canPop: false, // Menghalangi tombol kembali untuk menutup dialog ini
+        child: AlertDialog(
+          title: const Text(
+            'Sesi Berakhir',
+            style: TextStyle(color: TemaAplikasi.bahaya),
           ),
-        ],
+          content: const Text(
+            'Akun sedang digunakan di device berbeda atau sesi telah berakhir. Silakan login kembali.',
+          ),
+          actions: [
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: TemaAplikasi.bahaya,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () async {
+                await SesiAplikasiService.hapusSesi();
+                if (mounted) {
+                  Navigator.pushAndRemoveUntil(
+                    context,
+                    MaterialPageRoute(builder: (_) => const LayarPilihPeran()),
+                    (_) => false,
+                  );
+                }
+              },
+              child: const Text('Tutup'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -419,14 +465,7 @@ class _LayarDashboardKaryawanState extends State<LayarDashboardKaryawan> {
     }
   }
 
-  @override
-  void dispose() {
-    _sesiTimer?.cancel();
-    _notifikasiTimer?.cancel();
-    _beritaAutoSlideTimer?.cancel();
-    _beritaPageController.dispose();
-    super.dispose();
-  }
+
 
   @override
   Widget build(BuildContext context) {

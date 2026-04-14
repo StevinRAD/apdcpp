@@ -104,9 +104,7 @@ class _LayarMasterApdAdminState extends State<LayarMasterApdAdmin> {
     final minStokController = TextEditingController(
       text: item?['min_stok']?.toString() ?? '5',
     );
-    final satuanController = TextEditingController(
-      text: item?['satuan']?.toString() ?? 'pcs',
-    );
+
     final deskripsiController = TextEditingController(
       text: item?['deskripsi']?.toString() ?? '',
     );
@@ -164,7 +162,7 @@ class _LayarMasterApdAdminState extends State<LayarMasterApdAdmin> {
             final nama = namaController.text.trim();
             final stok = stokController.text.trim();
             final minStok = minStokController.text.trim();
-            final satuan = satuanController.text.trim();
+            const satuan = 'pcs';
             final deskripsi = deskripsiController.text.trim();
 
             final tidakAdaPerubahan =
@@ -175,7 +173,7 @@ class _LayarMasterApdAdminState extends State<LayarMasterApdAdmin> {
                 stok == _parseInt(item['stok']).toString() &&
                 minStok ==
                     _parseInt(item['min_stok'], fallback: 5).toString() &&
-                satuan == _textOrEmpty(item['satuan']) &&
+                _textOrEmpty(item['satuan']) == 'pcs' &&
                 deskripsi == _textOrEmpty(item['deskripsi']) &&
                 (isAktif ? '1' : '0') ==
                     (_textOrEmpty(item['is_aktif']).isEmpty
@@ -322,16 +320,7 @@ class _LayarMasterApdAdminState extends State<LayarMasterApdAdmin> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: satuanController,
-                          enabled: !saving,
-                          decoration: const InputDecoration(
-                            labelText: 'Satuan',
-                            prefixIcon: Icon(Icons.straighten_outlined),
-                          ),
-                          validator: (value) => validateWajib(value, 'Satuan'),
-                        ),
+
                         const SizedBox(height: 12),
                         TextFormField(
                           controller: deskripsiController,
@@ -471,9 +460,9 @@ class _LayarMasterApdAdminState extends State<LayarMasterApdAdmin> {
                                             final picked = await _picker
                                                 .pickImage(
                                                   source: source,
-                                                  imageQuality: 72,
-                                                  maxWidth: 1280,
-                                                  maxHeight: 1280,
+                                                  imageQuality: 50,
+                                                  maxWidth: 800,
+                                                  maxHeight: 800,
                                                 );
                                             if (picked == null) {
                                               return;

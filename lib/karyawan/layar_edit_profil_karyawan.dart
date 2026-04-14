@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:apdcpp/services/apd_api_service.dart';
 import 'package:apdcpp/services/izin_perangkat_service.dart';
+import 'package:image_cropper/image_cropper.dart';
 
 class LayarEditProfilKaryawan extends StatefulWidget {
   final String namaLengkap;
@@ -72,24 +73,73 @@ class _LayarEditProfilKaryawanState extends State<LayarEditProfilKaryawan> {
     });
 
     try {
-      final izin = await IzinPerangkatService.pastikanAksesGaleri(context);
+      final source = await showModalBottomSheet<ImageSource>(
+        context: context,
+        builder: (ctx) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.camera_alt_outlined),
+                title: const Text('Ambil dari Kamera'),
+                onTap: () => Navigator.pop(ctx, ImageSource.camera),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined),
+                title: const Text('Pilih dari Galeri'),
+                onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      if (source == null || !mounted) {
+        setState(() => _isPickingImage = false);
+        return;
+      }
+
+      final izin = source == ImageSource.camera
+          ? await IzinPerangkatService.pastikanAksesKamera(context)
+          : await IzinPerangkatService.pastikanAksesGaleri(context);
+
       if (!mounted || !izin) {
-        if (mounted) {
-          setState(() => _isPickingImage = false);
-        }
+        setState(() => _isPickingImage = false);
         return;
       }
 
       final pickedFile = await _picker.pickImage(
-        source: ImageSource.gallery,
+        source: source,
         imageQuality: 70,
-        maxWidth: 960,
-        maxHeight: 960,
+        maxWidth: 1024,
+        maxHeight: 1024,
       );
+
       if (pickedFile != null && mounted) {
-        setState(() {
-          _imageFile = File(pickedFile.path);
-        });
+        final croppedFile = await ImageCropper().cropImage(
+          sourcePath: pickedFile.path,
+          uiSettings: [
+            AndroidUiSettings(
+              toolbarTitle: 'Potong Foto Profil',
+              toolbarColor: const Color(0xFFD2A92B),
+              toolbarWidgetColor: Colors.white,
+              initAspectRatio: CropAspectRatioPreset.square,
+              lockAspectRatio: true,
+              aspectRatioPresets: [CropAspectRatioPreset.square],
+            ),
+            IOSUiSettings(
+              title: 'Potong Foto Profil',
+              aspectRatioLockEnabled: true,
+              aspectRatioPresets: [CropAspectRatioPreset.square],
+            ),
+          ],
+        );
+
+        if (croppedFile != null && mounted) {
+          setState(() {
+            _imageFile = File(croppedFile.path);
+          });
+        }
       }
     } catch (e) {
       if (mounted) {

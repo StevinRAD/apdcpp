@@ -38,15 +38,13 @@ class IzinPerangkatService {
 
   /// Request semua izin yang diperlukan sekaligus
   /// Dipanggil saat pertama kali buka aplikasi
-  static Future<Map<String, bool>> requestSemuaIzin(BuildContext context) async {
+  static Future<Map<String, bool>> requestSemuaIzin(
+    BuildContext context,
+  ) async {
     // Cek apakah izin sudah diberikan sebelumnya
     final sudahDiberikan = await cekIzinSudahDiberikan();
     if (sudahDiberikan) {
-      return {
-        'notifikasi': true,
-        'kamera': true,
-        'galeri': true,
-      };
+      return {'notifikasi': true, 'kamera': true, 'galeri': true};
     }
 
     final hasil = <String, bool>{};
