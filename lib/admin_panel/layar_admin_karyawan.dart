@@ -376,6 +376,52 @@ class _TabAdminKaryawanState extends State<TabAdminKaryawan> {
               return;
             }
 
+            if (isEdit && passwordBaru.isNotEmpty) {
+              final proceed = await showDialog<bool>(
+                context: stateCtx,
+                builder: (confirmCtx) => AlertDialog(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  title: Row(
+                    children: const [
+                      Icon(Icons.warning_amber_rounded, color: Colors.red, size: 28),
+                      SizedBox(width: 10),
+                      Flexible(
+                        child: Text(
+                          'Ubah Password?',
+                          style: TextStyle(color: Colors.red),
+                        ),
+                      ),
+                    ],
+                  ),
+                  content: const Text(
+                    'Anda akan mereset dan menimpa password karyawan ini sepenuhnya.\n\nKaryawan tersebut akan membutuhkan password baru ini untuk bisa login kembali ke aplikasi.\n\nApakah Anda yakin ingin mengubah password?',
+                    style: TextStyle(height: 1.4),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(confirmCtx, false),
+                      child: const Text('Batal', style: TextStyle(color: Colors.grey)),
+                    ),
+                    ElevatedButton(
+                      onPressed: () => Navigator.pop(confirmCtx, true),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: const Text('Ya, Ubah Password'),
+                    ),
+                  ],
+                ),
+              );
+
+              if (proceed != true) return;
+            }
+
             setStateDialog(() => saving = true);
 
             final response = await _api.karyawanAdminSimpan(

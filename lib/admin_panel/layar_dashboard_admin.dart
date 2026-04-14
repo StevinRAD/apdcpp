@@ -822,28 +822,6 @@ class _TabAdminBerandaState extends State<TabAdminBeranda> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 16),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    _AdminHeaderPill(
-                      ikon: Icons.pending_actions_outlined,
-                      label: '$_pengajuanMenunggu menunggu proses',
-                      warna: Colors.blue,
-                    ),
-                    _AdminHeaderPill(
-                      ikon: Icons.inventory_2_outlined,
-                      label: '$_stokMenipis stok perlu dipantau',
-                      warna: TemaAplikasi.emas,
-                    ),
-                    _AdminHeaderPill(
-                      ikon: Icons.verified_outlined,
-                      label: '$_disetujuiBulanIni disetujui bulan ini',
-                      warna: Colors.green,
-                    ),
-                  ],
-                ),
                 const SizedBox(height: 18),
                 KeyedSubtree(
                   key: widget.tutorialMenuCepatKey,
@@ -1635,44 +1613,6 @@ class _GrafikPoint {
     required this.stokMenipis,
     required this.totalMasuk,
   });
-}
-
-class _AdminHeaderPill extends StatelessWidget {
-  final IconData ikon;
-  final String label;
-  final Color warna;
-
-  const _AdminHeaderPill({
-    required this.ikon,
-    required this.label,
-    required this.warna,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(ikon, size: 16, color: warna),
-          const SizedBox(width: 8),
-          Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _MiniBar extends StatelessWidget {

@@ -4,7 +4,8 @@
       "Bash(curl -s \"https://api.github.com/repos/StevinRAD/apdcpp/actions/runs?per_page=1\")",
       "Bash(curl -s \"https://api.github.com/repos/StevinRAD/apdcpp/actions/runs/24357334376/jobs\")",
       "Bash(curl -s \"https://api.github.com/repos/StevinRAD/apdcpp/actions/runs?per_page=3\")",
-      "Bash(curl -s \"https://api.github.com/repos/StevinRAD/apdcpp/actions/runs?per_page=2\")"
+      "Bash(curl -s \"https://api.github.com/repos/StevinRAD/apdcpp/actions/runs?per_page=2\")",
+      "Bash(git add:*)"
     ]
   }
 }

@@ -169,7 +169,8 @@ class _LayarPersetujuanApdAdminState extends State<LayarPersetujuanApdAdmin> {
         ),
       ),
     );
-    controller.dispose();
+    // Jangan dispose controller di sini karena bisa menyebabkan error
+    // Controller akan otomatis di-dispose oleh framework
     return result;
   }
 
@@ -180,29 +181,59 @@ class _LayarPersetujuanApdAdminState extends State<LayarPersetujuanApdAdmin> {
     String? lokasiPengambilan,
   }) async {
     if (_prosesLoading) return;
+
+    // Set loading state BEFORE async
+    if (!mounted) return;
     setState(() {
       _prosesLoading = true;
     });
 
-    final response = await _api.prosesPengajuan(
-      idPengajuan: '${item['id_pengajuan']}',
-      statusPengajuan: status,
-      usernameAdmin: widget.usernameAdmin,
-      catatanAdmin: catatan,
-      lokasiPengambilan: lokasiPengambilan,
-    );
+    try {
+      final response = await _api.prosesPengajuan(
+        idPengajuan: '${item['id_pengajuan']}',
+        statusPengajuan: status,
+        usernameAdmin: widget.usernameAdmin,
+        catatanAdmin: catatan,
+        lokasiPengambilan: lokasiPengambilan,
+      );
 
-    if (!mounted) return;
-    setState(() {
-      _prosesLoading = false;
-    });
+      // Tampilkan feedback setelah async selesai
+      if (!mounted) return;
+      final pesan = _api.message(response);
+      final isSuccess = _api.isSuccess(response);
 
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(_api.message(response))));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(pesan),
+            backgroundColor: isSuccess ? TemaAplikasi.sukses : TemaAplikasi.bahaya,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
 
-    if (_api.isSuccess(response)) {
-      _loadData(preserveVisibleData: true);
+      if (isSuccess) {
+        if (mounted) {
+          await _loadData(preserveVisibleData: true);
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Terjadi kesalahan: $e'),
+            backgroundColor: TemaAplikasi.bahaya,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } finally {
+      // Reset loading state (paling aman: cek mounted dulu)
+      if (mounted) {
+        setState(() {
+          _prosesLoading = false;
+        });
+      }
     }
   }
 
@@ -283,8 +314,8 @@ class _LayarPersetujuanApdAdminState extends State<LayarPersetujuanApdAdmin> {
       ),
     );
 
-    lokasiCtrl.dispose();
-    catatanCtrl.dispose();
+    // Jangan dispose controller di sini karena bisa menyebabkan error
+    // Controller akan otomatis di-dispose oleh framework
     return result;
   }
 
@@ -469,34 +500,18 @@ class _LayarPersetujuanApdAdminState extends State<LayarPersetujuanApdAdmin> {
                                   if (hasil == null) return;
                                   if (!mounted) return;
 
-                                  // Tutup keyboard jika masih ngambang (penyebab layout overflow)
+                                  // Tutup keyboard
                                   FocusManager.instance.primaryFocus?.unfocus();
 
-                                  // Langsung tutup Bottom Sheet Pengajuan
-                                  Navigator.pop(context);
-
-                                  // BERI JEDA agar animasi Bottom Sheet turun & keyboard hilang sepenuhnya
-                                  await Future.delayed(
-                                    const Duration(milliseconds: 800),
-                                  );
+                                  // Tutup bottom sheet SEKARANG
                                   if (!mounted) return;
+                                  Navigator.of(context).pop();
 
-                                  // Baru tampilkan Popup Loading di layar utama (Scaffold) yang bersih
-                                  showDialog(
-                                    context: context,
-                                    barrierDismissible: false,
-                                    builder: (contextLoading) => const PopScope(
-                                      canPop:
-                                          false, // Cegah di-back secara paksa pakai tombol hp
-                                      child: Center(
-                                        child: CircularProgressIndicator(
-                                          color: TemaAplikasi.emas,
-                                        ),
-                                      ),
-                                    ),
-                                  );
+                                  // Tunggu sedikit agar Navigator stack stabil
+                                  await Future.delayed(const Duration(milliseconds: 50));
 
-                                  // Kirim ke server via API
+                                  // Kirim ke server via API (hanya jika masih mounted)
+                                  if (!mounted) return;
                                   await _prosesStatus(
                                     item: item,
                                     status: 'Disetujui',
@@ -505,10 +520,6 @@ class _LayarPersetujuanApdAdminState extends State<LayarPersetujuanApdAdmin> {
                                         : hasil.catatan,
                                     lokasiPengambilan: hasil.lokasi,
                                   );
-
-                                  // Cukup pop 1x saja karena Bottom Sheet sudah ditutup di atas
-                                  if (!mounted) return;
-                                  Navigator.pop(context);
                                 },
                           icon: const Icon(
                             Icons.check_circle_outline,
@@ -532,42 +543,23 @@ class _LayarPersetujuanApdAdminState extends State<LayarPersetujuanApdAdmin> {
                                   if (alasan == null || alasan.isEmpty) return;
                                   if (!mounted) return;
 
-                                  // Tutup keyboard jika masih ngambang
+                                  // Tutup keyboard
                                   FocusManager.instance.primaryFocus?.unfocus();
 
-                                  // Langsung tutup Bottom Sheet
-                                  Navigator.pop(context);
-
-                                  // Jeda transisi
-                                  await Future.delayed(
-                                    const Duration(milliseconds: 800),
-                                  );
+                                  // Tutup bottom sheet SEKARANG
                                   if (!mounted) return;
+                                  Navigator.of(context).pop();
 
-                                  // Munculkan Loading transparan di layar yang bersih
-                                  showDialog(
-                                    context: context,
-                                    barrierDismissible: false,
-                                    builder: (contextLoading) => const PopScope(
-                                      canPop: false,
-                                      child: Center(
-                                        child: CircularProgressIndicator(
-                                          color: TemaAplikasi.emas,
-                                        ),
-                                      ),
-                                    ),
-                                  );
+                                  // Tunggu sedikit agar Navigator stack stabil
+                                  await Future.delayed(const Duration(milliseconds: 50));
 
-                                  // Kirim ke API
+                                  // Kirim ke server via API (hanya jika masih mounted)
+                                  if (!mounted) return;
                                   await _prosesStatus(
                                     item: item,
                                     status: 'Ditolak',
                                     catatan: alasan,
                                   );
-
-                                  // Pop animasi loadingnya
-                                  if (!mounted) return;
-                                  Navigator.pop(context);
                                 },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: TemaAplikasi.bahaya,

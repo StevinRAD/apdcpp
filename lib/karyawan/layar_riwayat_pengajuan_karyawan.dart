@@ -217,7 +217,7 @@ class _LayarRiwayatPengajuanKaryawanState
                         const SizedBox(height: 2),
                         Text(
                           '${item['jumlah_pengajuan'] ?? '-'} ${item['satuan'] ?? ''}'
-                          '${(item['ukuran']?.toString() ?? '').isNotEmpty ? ' Â· Ukuran: ${item['ukuran']}' : ''}',
+                          '${(item['ukuran']?.toString() ?? '').isNotEmpty ? '· Ukuran: ${item['ukuran']}' : ''}',
                           style: const TextStyle(
                             color: TemaAplikasi.netral,
                             fontSize: 12,

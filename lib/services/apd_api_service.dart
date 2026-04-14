@@ -512,18 +512,7 @@ class ApiApdService {
               .timeout(const Duration(seconds: 10));
 
           final nama = _readText(res['nama_lengkap'], fallback: user);
-          try {
-            await _supabase.from('bantuan_login').insert({
-              'username': user,
-              'nama_lengkap': nama,
-              'password_diingat': '',
-              'alasan_kendala':
-                  'Akun dinonaktifkan otomatis setelah 3x gagal login.',
-              'status': 'menunggu',
-            });
-          } catch (_) {
-            // Abaikan jika gagal insert banding otomatis.
-          }
+          // Auto-insert removed to prevent blank tickets interfering with actual employee submissions.
 
           return {
             'status': 'gagal',
@@ -942,6 +931,7 @@ class ApiApdService {
         'alasan_pengajuan': alasan,
         'bukti_foto': buktiPath,
         'status_pengajuan': 'menunggu',
+        'jumlah': 1,
       });
 
       final dashboardTerbaru = await dashboardKaryawan(username);
@@ -1050,7 +1040,7 @@ class ApiApdService {
       final query = _supabase
           .from('pengajuan')
           .select(
-            '*, apd(nama_apd,stok,min_stok), '
+            '*, apd(nama_apd,stok,min_stok,satuan), '
             'karyawan(username,nama_lengkap,jabatan,departemen,lokasi_kerja,cooldown_pengajuan_hari,foto_profil), '
             'admin(nama_lengkap)',
           );
@@ -1107,6 +1097,7 @@ class ApiApdService {
           'nama_apd': _readText(apd['nama_apd'], fallback: '-'),
           'stok_tersedia': apd['stok'] ?? 0,
           'min_stok': apd['min_stok'] ?? 0,
+          'satuan': _readText(apd['satuan'], fallback: 'pcs'),
           'jumlah_pengajuan': row['jumlah_pengajuan'] ?? row['jumlah'] ?? 1,
           'nama_admin_proses': _readText(admin['nama_lengkap']),
         });
@@ -1142,7 +1133,7 @@ class ApiApdService {
 
       final existing = await _supabase
           .from('pengajuan')
-          .select('id,id_apd,id_karyawan,status_pengajuan')
+          .select('id,id_apd,id_karyawan,status_pengajuan,jumlah')
           .eq('id', targetId)
           .maybeSingle();
       if (existing == null) {
@@ -1177,15 +1168,17 @@ class ApiApdService {
               .maybeSingle();
           if (apd != null) {
             final stokSaatIni = int.tryParse('${apd['stok'] ?? 0}') ?? 0;
-            if (stokSaatIni <= 0) {
+            // Gunakan jumlah untuk mengurangi stok sesuai jumlah yang diminta
+            final jumlahDiminta = int.tryParse('${existing['jumlah'] ?? 1}') ?? 1;
+            if (stokSaatIni < jumlahDiminta) {
               return {
                 'status': 'gagal',
-                'pesan': 'Stok APD sudah habis sehingga tidak bisa disetujui',
+                'pesan': 'Stok APD tidak mencukupi (tersedia: $stokSaatIni, diminta: $jumlahDiminta)',
               };
             }
             await _supabase
                 .from('apd')
-                .update({'stok': stokSaatIni - 1})
+                .update({'stok': stokSaatIni - jumlahDiminta})
                 .eq('id', idApd);
           }
         }
@@ -1664,8 +1657,8 @@ class ApiApdService {
         'tanggal': tanggal,
         'judul': judul,
         'keterangan': keterangan,
-        'is_libur': isLibur,
-        'is_aktif': isAktif,
+        'is_libur': isLibur ? 1 : 0,
+        'is_aktif': isAktif ? 1 : 0,
         'jam_mulai': jamMulaiValue.isEmpty ? null : jamMulaiValue,
         'jam_selesai': jamSelesaiValue.isEmpty ? null : jamSelesaiValue,
       };
@@ -2089,7 +2082,7 @@ class ApiApdService {
       final apdMap = await _loadMapByIds(
         table: 'apd',
         ids: pengajuanApdIds,
-        selectColumns: 'id,nama_apd,stok,min_stok',
+        selectColumns: 'id,nama_apd,stok,min_stok,satuan',
       );
       final adminMapPengajuan = await _loadMapByIds(
         table: 'admin',
@@ -2154,6 +2147,10 @@ class ApiApdService {
           'bukti_foto': _readText(row['bukti_foto']),
           'stok_tersedia': apd?['stok'] ?? row['stok_tersedia'] ?? 0,
           'min_stok': apd?['min_stok'] ?? row['min_stok'] ?? 0,
+          'satuan': _readText(
+            row['satuan'],
+            fallback: _readText(apd?['satuan'], fallback: 'pcs'),
+          ),
         });
       }
 
@@ -2522,7 +2519,7 @@ class ApiApdService {
       final apdMap = await _loadMapByIds(
         table: 'apd',
         ids: apdIds,
-        selectColumns: 'id,nama_apd,stok,min_stok,is_aktif',
+        selectColumns: 'id,nama_apd,stok,min_stok,satuan,is_aktif',
       );
 
       final pengajuanMenunggu = pengajuanRows
@@ -2792,7 +2789,7 @@ class ApiApdService {
         'ringkasan': ringkasan,
         'isi': isi,
         'kategori': kategori,
-        'is_aktif': isAktif,
+        'is_aktif': isAktif ? 1 : 0,
         'id_admin': admin?['id'],
       };
       if (img != null) data['gambar_berita'] = img;
@@ -3127,19 +3124,11 @@ class ApiApdService {
           .eq('username', user)
           .eq('status', 'menunggu')
           .maybeSingle();
+
       if (pending != null) {
-        await _supabase
-            .from('bantuan_login')
-            .update({
-              'nama_lengkap': namaLengkap.trim(),
-              'password_diingat': passwordDiingat.trim(),
-              'alasan_kendala': alasanKendala.trim(),
-            })
-            .eq('id', pending['id']);
         return {
-          'status': 'sukses',
-          'pesan':
-              'Permintaan banding sudah ada, data terbaru berhasil diperbarui.',
+          'status': 'gagal',
+          'pesan': 'Anda sudah mengirimkan laporan banding. Mohon tunggu proses dari admin.',
         };
       }
 
@@ -3169,7 +3158,7 @@ class ApiApdService {
       final mapped = _asMapList(rows)
           .where((row) {
             final status = _normalizeStatus(row['status']?.toString());
-            return status != 'kode_admin' && status != 'admin_gagal_login';
+            return status == 'menunggu';
           })
           .map(
             (row) => <String, dynamic>{
@@ -3220,9 +3209,9 @@ class ApiApdService {
       if (tindakan == 'tandai_baca') {
         await _supabase
             .from('bantuan_login')
-            .update({'status': 'ditinjau'})
+            .delete()
             .eq('id', targetId);
-        return {'status': 'sukses', 'pesan': 'Bantuan ditandai sudah dibaca'};
+        return {'status': 'sukses', 'pesan': 'Bantuan ditandai sudah dibaca dan dihapus'};
       }
 
       if (tindakan == 'aktifkan') {
@@ -3235,15 +3224,28 @@ class ApiApdService {
               .eq('username', usernameKaryawan)
               .maybeSingle();
           idKaryawan = _readText(karyawan?['id']);
+          
+          final bandingLengkap = await _supabase.from('bantuan_login').select('password_diingat').eq('id', targetId).maybeSingle();
+          final passBaru = _readText(bandingLengkap?['password_diingat']);
+
+          final Map<String, dynamic> updateKaryawan = {
+            'status': 'aktif',
+            'banned_until': null
+          };
+
+          if (passBaru.isNotEmpty) {
+            updateKaryawan['password'] = passBaru;
+          }
+
           await _supabase
               .from('karyawan')
-              .update({'status': 'aktif', 'banned_until': null})
+              .update(updateKaryawan)
               .eq('username', usernameKaryawan);
         }
         await _supabase
             .from('bantuan_login')
-            .update({'status': 'selesai'})
-            .eq('id', targetId);
+            .delete()
+            .eq('username', usernameKaryawan);
         if (idKaryawan.isNotEmpty) {
           await _kirimNotifikasiKaryawan(
             idKaryawan: idKaryawan,

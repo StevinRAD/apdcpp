@@ -162,7 +162,7 @@ class _LayarBantuanLoginAdminState extends State<LayarBantuanLoginAdmin> {
                                             CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            pesan['nama_lengkap'] ?? '-',
+                                            pesan['nama_lengkap']?.toString().trim().isEmpty ?? true ? 'Tanpa Nama' : pesan['nama_lengkap'],
                                             style: const TextStyle(
                                               fontSize: 16,
                                               fontWeight: FontWeight.bold,
@@ -179,50 +179,100 @@ class _LayarBantuanLoginAdminState extends State<LayarBantuanLoginAdmin> {
                                         ],
                                       ),
                                     ),
-                                    Text(
-                                      pesan['created_at']
-                                              ?.toString()
-                                              .split(' ')
-                                              .first ??
-                                          '',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: TemaAplikasi.netral.withValues(
-                                          alpha: 0.8,
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      children: [
+                                        Text(
+                                          pesan['created_at'] != null && pesan['created_at'].toString().isNotEmpty
+                                              ? () {
+                                                  try {
+                                                    final date = DateTime.tryParse(pesan['created_at'].toString());
+                                                    if (date == null) return pesan['created_at'].toString();
+                                                    final day = date.day.toString().padLeft(2, '0');
+                                                    final monthList = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+                                                    final month = monthList[date.month - 1];
+                                                    final year = date.year;
+                                                    final jam = date.hour.toString().padLeft(2, '0');
+                                                    final mnt = date.minute.toString().padLeft(2, '0');
+                                                    return '$day $month $year\n$jam:$mnt WIB';
+                                                  } catch (e) {
+                                                    return pesan['created_at'].toString();
+                                                  }
+                                                }()
+                                              : '-',
+                                          textAlign: TextAlign.right,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            height: 1.3,
+                                            fontWeight: FontWeight.w500,
+                                            color: TemaAplikasi.netral.withValues(
+                                              alpha: 0.8,
+                                            ),
+                                          ),
                                         ),
-                                      ),
+                                      ],
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 12),
-                                const Divider(),
-                                const SizedBox(height: 8),
-                                const Text(
-                                  'Password Terakhir Diingat:',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 12,
-                                    color: TemaAplikasi.netral,
+                                const SizedBox(height: 16),
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.withValues(alpha: 0.05),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
                                   ),
-                                ),
-                                Text(
-                                  pesan['password_diingat'] ?? '-',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w500,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Password Terakhir Diingat:',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 12,
+                                          color: TemaAplikasi.netral,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        (pesan['password_diingat']?.toString().trim().isEmpty ?? true)
+                                            ? '(Karyawan tidak mengisi / Lupa)'
+                                            : pesan['password_diingat'].toString(),
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 14,
+                                          color: (pesan['password_diingat']?.toString().trim().isEmpty ?? true)
+                                              ? Colors.grey.shade600
+                                              : TemaAplikasi.teksUtama,
+                                          fontStyle: (pesan['password_diingat']?.toString().trim().isEmpty ?? true) ? FontStyle.italic : FontStyle.normal,
+                                        ),
+                                      ),
+                                      const Padding(
+                                        padding: EdgeInsets.symmetric(vertical: 8),
+                                        child: Divider(height: 1),
+                                      ),
+                                      const Text(
+                                        'Alasan Banding dari Karyawan:',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 12,
+                                          color: TemaAplikasi.netral,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        (pesan['alasan_kendala']?.toString().trim().isEmpty ?? true)
+                                            ? '-'
+                                            : pesan['alasan_kendala'].toString(),
+                                        style: const TextStyle(
+                                          height: 1.4,
+                                          fontSize: 14,
+                                          color: TemaAplikasi.teksUtama,
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                ),
-                                const SizedBox(height: 8),
-                                const Text(
-                                  'Penjelasan/Kendala:',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 12,
-                                    color: TemaAplikasi.netral,
-                                  ),
-                                ),
-                                Text(
-                                  pesan['alasan_kendala'] ?? '-',
-                                  style: const TextStyle(height: 1.4),
                                 ),
                                 const SizedBox(height: 16),
                                 Wrap(
