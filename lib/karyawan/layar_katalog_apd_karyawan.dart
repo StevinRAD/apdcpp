@@ -1,8 +1,8 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'package:apdcpp/konfigurasi_api.dart';
-import 'package:apdcpp/karyawan/layar_form_pengajuan_apd.dart';
+import 'package:apdcpp/karyawan/layar_pengajuan_dokumen_apd.dart';
 import 'package:apdcpp/services/apd_api_service.dart';
 import 'package:apdcpp/tema_aplikasi.dart';
 
@@ -301,30 +301,185 @@ class _LayarKatalogApdKaryawanState extends State<LayarKatalogApdKaryawan> {
                                 Align(
                                   alignment: Alignment.centerRight,
                                   child: ElevatedButton(
-                                    onPressed:
-                                        (stok <= 0 ||
-                                            (_aturanPengajuan.containsKey(
-                                                  'bisa_ajukan',
-                                                ) &&
-                                                _aturanPengajuan['bisa_ajukan'] ==
-                                                    false))
+                                    onPressed: stok <= 0
                                         ? null
                                         : () async {
-                                            final result =
-                                                await Navigator.push<bool>(
-                                                  context,
-                                                  MaterialPageRoute(
-                                                    builder: (_) =>
-                                                        LayarFormPengajuanApd(
-                                                          username:
-                                                              widget.username,
-                                                          apd: item,
-                                                        ),
+                                            // Cek aturan pengajuan sebelum lanjut
+                                            if (!_aturanPengajuan.containsKey(
+                                                      'bisa_ajukan',
+                                                    ) ||
+                                                _aturanPengajuan[
+                                                        'bisa_ajukan'] ==
+                                                    true) {
+                                              // Bisa mengajukan, lanjut ke form pengajuan
+                                              final result =
+                                                  await Navigator.push<bool>(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (_) =>
+                                                      LayarPengajuanDokumenApd(
+                                                    username: widget.username,
+                                                    initialApd: item,
                                                   ),
-                                                );
-                                            if (result == true) {
-                                              await _loadData();
-                                              await _loadAturanPengajuan();
+                                                ),
+                                              );
+                                              if (result == true) {
+                                                await _loadData();
+                                                await _loadAturanPengajuan();
+                                              }
+                                            } else {
+                                              // Tidak bisa mengajukan, tampilkan popup peringatan
+                                              if (!mounted) return;
+                                              showDialog(
+                                                context: context,
+                                                builder: (dialogContext) =>
+                                                    AlertDialog(
+                                                  shape: RoundedRectangleBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            20),
+                                                  ),
+                                                  title: Row(
+                                                    children: [
+                                                      Icon(
+                                                        Icons.block_outlined,
+                                                        color: TemaAplikasi
+                                                            .bahaya,
+                                                      ),
+                                                      const SizedBox(width: 10),
+                                                      const Text(
+                                                        'Pengajuan Ditahan',
+                                                        style: TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.w800,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  content: Column(
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: [
+                                                      Text(
+                                                        _aturanPengajuan[
+                                                                    'pesan'] ??
+                                                                'Anda tidak dapat mengajukan APD saat ini.',
+                                                        style: const TextStyle(
+                                                          height: 1.45,
+                                                          fontSize: 14,
+                                                        ),
+                                                      ),
+                                                      const SizedBox(height: 12),
+                                                      // Tampilkan info tambahan berdasarkan status
+                                                      if (_aturanPengajuan[
+                                                                  'status'] ==
+                                                              'menunggu_proses')
+                                                        Container(
+                                                          padding:
+                                                              const EdgeInsets
+                                                                  .all(12),
+                                                          decoration:
+                                                              BoxDecoration(
+                                                            color: TemaAplikasi
+                                                                .biruMuda
+                                                                .withValues(
+                                                                    alpha:
+                                                                        0.3),
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        12),
+                                                          ),
+                                                          child: Row(
+                                                            children: [
+                                                              const Icon(
+                                                                Icons
+                                                                    .info_outline,
+                                                                size: 18,
+                                                                color: TemaAplikasi
+                                                                    .biruTua,
+                                                              ),
+                                                              const SizedBox(
+                                                                  width: 8),
+                                                              Expanded(
+                                                                child: Text(
+                                                                  'Masih ada pengajuan yang menunggu persetujuan admin. Silakan tunggu sampai diproses.',
+                                                                  style:
+                                                                      TextStyle(
+                                                                    fontSize:
+                                                                        12,
+                                                                    color: TemaAplikasi
+                                                                        .biruTua,
+                                                                    height:
+                                                                        1.4,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                        ),
+                                                      if (_aturanPengajuan[
+                                                                  'status'] ==
+                                                              'cooldown')
+                                                        Container(
+                                                          padding:
+                                                              const EdgeInsets
+                                                                  .all(12),
+                                                          decoration:
+                                                              BoxDecoration(
+                                                            color: TemaAplikasi
+                                                                .emas
+                                                                .withValues(
+                                                                    alpha:
+                                                                        0.15),
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        12),
+                                                          ),
+                                                          child: Row(
+                                                            children: [
+                                                              Icon(
+                                                                Icons
+                                                                    .schedule_outlined,
+                                                                size: 18,
+                                                                color: TemaAplikasi
+                                                                    .emasTua,
+                                                              ),
+                                                              const SizedBox(
+                                                                  width: 8),
+                                                              Expanded(
+                                                                child: Text(
+                                                                  'Masa tunggu pengajuan: ${_cooldownHari()} hari. Anda bisa mengajukan lagi pada ${_tanggalBolehAjukan()}',
+                                                                  style:
+                                                                      TextStyle(
+                                                                    fontSize:
+                                                                        12,
+                                                                    color: TemaAplikasi
+                                                                        .emasTua,
+                                                                    height:
+                                                                        1.4,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                        ),
+                                                    ],
+                                                  ),
+                                                  actions: [
+                                                    TextButton(
+                                                      onPressed: () =>
+                                                          Navigator.pop(
+                                                              dialogContext),
+                                                      child: const Text('Mengerti'),
+                                                    ),
+                                                  ],
+                                                ),
+                                              );
                                             }
                                           },
                                     child: const Text('Ajukan'),

@@ -7,6 +7,7 @@ import 'package:timezone/data/latest.dart' as tz_data;
 
 /// Service untuk mengelola notifikasi lokal di aplikasi
 /// Menampilkan popup notifikasi di layar HP seperti aplikasi native
+/// Support suara notifikasi kustom untuk Android dan iOS
 class NotifikasiLokalService {
   NotifikasiLokalService._();
 
@@ -23,7 +24,7 @@ class NotifikasiLokalService {
     // Initialize timezone
     tz_data.initializeTimeZones();
 
-    // Android initialization settings
+    // Android initialization settings dengan suara kustom
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
 
     // iOS initialization settings
@@ -87,15 +88,20 @@ class NotifikasiLokalService {
   }
 
   /// Tampilkan notifikasi segera
+  /// [soundType] jenis suara: 'default', 'pengajuan', 'persetujuan', 'berita'
   static Future<void> tampilkanNotifikasi({
     required int id,
     required String judul,
     required String isi,
     String? payload,
+    String soundType = 'default',
   }) async {
     if (!_initialized) {
       await inisialisasi();
     }
+
+    // Tentukan suara berdasarkan tipe
+    final String soundPath = _getSoundPath(soundType);
 
     final androidDetails = AndroidNotificationDetails(
       'apd_notifikasi_channel',
@@ -107,13 +113,16 @@ class NotifikasiLokalService {
       icon: '@mipmap/ic_launcher',
       styleInformation: const BigTextStyleInformation(''),
       playSound: true,
+      sound: RawResourceAndroidNotificationSound(soundPath),
       enableVibration: true,
+      vibrationPattern: Int64List.fromList([0, 500, 200, 500]),
     );
 
-    const iosDetails = DarwinNotificationDetails(
+    final iosDetails = DarwinNotificationDetails(
       presentAlert: true,
       presentBadge: true,
       presentSound: true,
+      sound: soundType == 'default' ? null : soundPath,
     );
 
     final notificationDetails = NotificationDetails(
@@ -130,6 +139,22 @@ class NotifikasiLokalService {
     );
   }
 
+  /// Mendapatkan path suara berdasarkan tipe notifikasi
+  static String _getSoundPath(String soundType) {
+    switch (soundType) {
+      case 'pengajuan':
+        return 'pengajuan';
+      case 'persetujuan':
+        return 'persetujuan';
+      case 'berita':
+        return 'berita';
+      case 'peringatan':
+        return 'peringatan';
+      default:
+        return 'notifikasi';
+    }
+  }
+
   /// Tampilkan notifikasi untuk update data
   static Future<void> tampilkanNotifikasiUpdate({
     required String jenisUpdate,
@@ -141,6 +166,7 @@ class NotifikasiLokalService {
       judul: 'Update $jenisUpdate',
       isi: detail ?? 'Ada perubahan data $jenisUpdate. Cek sekarang!',
       payload: 'update_$jenisUpdate',
+      soundType: 'berita',
     );
   }
 
@@ -155,6 +181,7 @@ class NotifikasiLokalService {
       judul: 'Pengajuan Baru',
       isi: '$namaKaryawan mengajukan $jenisApd',
       payload: 'pengajuan_baru',
+      soundType: 'pengajuan',
     );
   }
 
@@ -169,6 +196,7 @@ class NotifikasiLokalService {
       judul: 'Status Pengajuan: $status',
       isi: keterangan ?? 'Status pengajuan APD Anda telah berubah',
       payload: 'status_pengajuan',
+      soundType: 'persetujuan',
     );
   }
 
@@ -182,6 +210,7 @@ class NotifikasiLokalService {
       judul: 'Berita Terbaru',
       isi: judulBerita,
       payload: 'berita_baru',
+      soundType: 'berita',
     );
   }
 

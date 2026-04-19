@@ -78,11 +78,14 @@ class _LayarRiwayatPengajuanKaryawanState
   Color _statusColor(String status) {
     switch (status.toLowerCase()) {
       case 'disetujui':
+      case 'diterima':
         return Colors.green;
       case 'ditolak':
         return TemaAplikasi.bahaya;
       case 'selesai':
         return TemaAplikasi.biruTua;
+      case 'menunggu':
+        return Colors.orange;
       default:
         return Colors.blue;
     }
@@ -91,13 +94,32 @@ class _LayarRiwayatPengajuanKaryawanState
   IconData _statusIcon(String status) {
     switch (status.toLowerCase()) {
       case 'disetujui':
+      case 'diterima':
         return Icons.check_circle_outline;
       case 'ditolak':
         return Icons.cancel_outlined;
       case 'selesai':
         return Icons.inventory_2_outlined;
-      default:
+      case 'menunggu':
         return Icons.hourglass_top_outlined;
+      default:
+        return Icons.help_outline;
+    }
+  }
+
+  String _statusLabel(String status) {
+    switch (status.toLowerCase()) {
+      case 'disetujui':
+      case 'diterima':
+        return 'Disetujui';
+      case 'ditolak':
+        return 'Ditolak';
+      case 'selesai':
+        return 'Selesai';
+      case 'menunggu':
+        return 'Menunggu';
+      default:
+        return status;
     }
   }
 
@@ -110,7 +132,7 @@ class _LayarRiwayatPengajuanKaryawanState
 
   bool _statusDisetujui(String status) {
     final s = status.toLowerCase();
-    return s == 'disetujui' || s == 'diproses' || s == 'selesai';
+    return s == 'disetujui' || s == 'diterima' || s == 'diproses' || s == 'selesai';
   }
 
   String _tanggalDiproses(Map<String, dynamic> item) {
@@ -163,22 +185,26 @@ class _LayarRiwayatPengajuanKaryawanState
   }
 
   Widget _buildCard(Map<String, dynamic> item) {
-    final status = item['status_pengajuan']?.toString() ?? '-';
-    final statusColor = _statusColor(status);
-    final statusIcon = _statusIcon(status);
+    final statusRaw = item['status_pengajuan']?.toString() ?? '-';
+    final status = _statusLabel(statusRaw);
+    final statusColor = _statusColor(statusRaw);
+    final statusIcon = _statusIcon(statusRaw);
     final lokasi = item['lokasi_pengambilan']?.toString() ?? '';
     final catatan = item['catatan_admin']?.toString() ?? '';
-    final disetujui = _statusDisetujui(status);
-    final ditolak = status.toLowerCase() == 'ditolak';
+    final disetujui = _statusDisetujui(statusRaw);
+    final ditolak = statusRaw.toLowerCase() == 'ditolak';
+    final menunggu = statusRaw.toLowerCase() == 'menunggu';
     final tanggalDiproses = _tanggalDiproses(item);
 
     return Card(
-      elevation: disetujui ? 2 : 0,
+      elevation: disetujui ? 2 : (menunggu ? 1 : 0),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18),
         side: disetujui
             ? const BorderSide(color: Colors.green, width: 1.5)
-            : BorderSide.none,
+            : (menunggu
+                ? BorderSide(color: Colors.orange.withValues(alpha: 0.5), width: 1)
+                : BorderSide.none),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(18),
@@ -234,18 +260,72 @@ class _LayarRiwayatPengajuanKaryawanState
                     decoration: BoxDecoration(
                       color: statusColor.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(999),
+                      border: menunggu
+                          ? Border.all(color: statusColor.withValues(alpha: 0.3))
+                          : null,
                     ),
-                    child: Text(
-                      status,
-                      style: TextStyle(
-                        color: statusColor,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12,
-                      ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (menunggu)
+                          SizedBox(
+                            width: 12,
+                            height: 12,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(statusColor),
+                            ),
+                          ),
+                        if (menunggu) const SizedBox(width: 4),
+                        Text(
+                          status,
+                          style: TextStyle(
+                            color: statusColor,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
+
+              // Info Menunggu - tampil menonjol jika status menunggu
+              if (menunggu) ...[
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.orange.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.hourglass_top_outlined,
+                        size: 18,
+                        color: Colors.orange.shade700,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Pengajuan Anda sedang diproses oleh admin. Silakan tunggu persetujuan.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.orange.shade900,
+                            height: 1.4,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
 
               // LOKASI PENGAMBILAN (tampil menonjol jika disetujui)
               if (disetujui && lokasi.isNotEmpty) ...[
@@ -305,11 +385,15 @@ class _LayarRiwayatPengajuanKaryawanState
                   width: double.infinity,
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: (ditolak ? TemaAplikasi.bahaya : TemaAplikasi.emas)
+                    color: (ditolak
+                            ? TemaAplikasi.bahaya
+                            : (menunggu ? Colors.orange : TemaAplikasi.emas))
                         .withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                      color: (ditolak ? TemaAplikasi.bahaya : TemaAplikasi.emas)
+                      color: (ditolak
+                              ? TemaAplikasi.bahaya
+                              : (menunggu ? Colors.orange : TemaAplikasi.emas))
                           .withValues(alpha: 0.25),
                     ),
                   ),
@@ -319,20 +403,22 @@ class _LayarRiwayatPengajuanKaryawanState
                       Icon(
                         ditolak
                             ? Icons.info_outline
-                            : Icons.sticky_note_2_outlined,
+                            : (menunggu ? Icons.access_time : Icons.sticky_note_2_outlined),
                         size: 15,
                         color: ditolak
                             ? TemaAplikasi.bahaya
-                            : TemaAplikasi.emasTua,
+                            : (menunggu ? Colors.orange : TemaAplikasi.emasTua),
                       ),
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          ditolak ? 'Alasan: $catatan' : 'Catatan: $catatan',
+                          ditolak
+                              ? 'Alasan: $catatan'
+                              : (menunggu ? 'Catatan: $catatan' : 'Catatan: $catatan'),
                           style: TextStyle(
                             color: ditolak
                                 ? TemaAplikasi.bahaya
-                                : TemaAplikasi.teksUtama,
+                                : (menunggu ? Colors.orange.shade900 : TemaAplikasi.teksUtama),
                             fontSize: 12,
                             height: 1.4,
                           ),
@@ -378,13 +464,16 @@ class _LayarRiwayatPengajuanKaryawanState
   }
 
   void _bukaDetail(Map<String, dynamic> item) {
-    final status = item['status_pengajuan']?.toString() ?? '-';
-    final statusColor = _statusColor(status);
+    final statusRaw = item['status_pengajuan']?.toString() ?? '-';
+    final status = _statusLabel(statusRaw);
+    final statusColor = _statusColor(statusRaw);
+    final statusIcon = _statusIcon(statusRaw);
     final lokasi = item['lokasi_pengambilan']?.toString() ?? '';
     final catatan = item['catatan_admin']?.toString() ?? '';
     final buktiFoto = buildUploadUrl(item['bukti_foto']?.toString());
-    final disetujui = _statusDisetujui(status);
-    final ditolak = status.toLowerCase() == 'ditolak';
+    final disetujui = _statusDisetujui(statusRaw);
+    final ditolak = statusRaw.toLowerCase() == 'ditolak';
+    final menunggu = statusRaw.toLowerCase() == 'menunggu';
     final tanggalDiproses = _tanggalDiproses(item);
 
     showModalBottomSheet<void>(
@@ -432,11 +521,24 @@ class _LayarRiwayatPengajuanKaryawanState
                 decoration: BoxDecoration(
                   color: statusColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(999),
+                  border: menunggu
+                      ? Border.all(color: statusColor.withValues(alpha: 0.3))
+                      : null,
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(_statusIcon(status), color: statusColor, size: 16),
+                    if (menunggu)
+                      SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(statusColor),
+                        ),
+                      ),
+                    if (menunggu) const SizedBox(width: 6),
+                    Icon(statusIcon, color: statusColor, size: 18),
                     const SizedBox(width: 6),
                     Text(
                       status,
@@ -449,6 +551,83 @@ class _LayarRiwayatPengajuanKaryawanState
                 ),
               ),
               const SizedBox(height: 16),
+
+              // Info Menunggu - tampil menonjol jika status menunggu
+              if (menunggu) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color: Colors.orange.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.hourglass_top_outlined,
+                            size: 22,
+                            color: Colors.orange.shade700,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Menunggu Persetujuan',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: Colors.orange.shade900,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Pengajuan APD Anda sedang dalam proses review oleh admin. '
+                        'Anda akan menerima notifikasi setelah pengajuan disetujui atau ditolak.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.orange.shade900,
+                          height: 1.5,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.info_outline,
+                              size: 16,
+                              color: Colors.orange.shade700,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                ' Pantau status pengajuan secara berkala di dashboard karyawan.',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.orange.shade900,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+              ],
 
               // LOKASI PENGAMBILAN - menonjol di atas jika disetujui
               if (disetujui && lokasi.isNotEmpty) ...[
@@ -531,11 +710,15 @@ class _LayarRiwayatPengajuanKaryawanState
                   width: double.infinity,
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: (ditolak ? TemaAplikasi.bahaya : TemaAplikasi.emas)
+                    color: (ditolak
+                            ? TemaAplikasi.bahaya
+                            : (menunggu ? Colors.orange : TemaAplikasi.emas))
                         .withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
-                      color: (ditolak ? TemaAplikasi.bahaya : TemaAplikasi.emas)
+                      color: (ditolak
+                              ? TemaAplikasi.bahaya
+                              : (menunggu ? Colors.orange : TemaAplikasi.emas))
                           .withValues(alpha: 0.25),
                     ),
                   ),
@@ -543,12 +726,14 @@ class _LayarRiwayatPengajuanKaryawanState
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        ditolak ? 'Alasan Penolakan' : 'Catatan Admin',
+                        ditolak
+                            ? 'Alasan Penolakan'
+                            : (menunggu ? 'Catatan' : 'Catatan Admin'),
                         style: TextStyle(
                           fontWeight: FontWeight.w700,
                           color: ditolak
                               ? TemaAplikasi.bahaya
-                              : TemaAplikasi.emasTua,
+                              : (menunggu ? Colors.orange : TemaAplikasi.emasTua),
                         ),
                       ),
                       const SizedBox(height: 6),
