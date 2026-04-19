@@ -38,6 +38,7 @@ class _LayarKalenderKaryawanState extends State<LayarKalenderKaryawan> {
 
   @override
   void initState() {
+    super.initState();
     _loadSemuaEvent();
     _mulaiRealtimeKalender();
   }

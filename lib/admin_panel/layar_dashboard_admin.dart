@@ -15,6 +15,8 @@ import 'package:apdcpp/admin_panel/layar_bantuan_login_admin.dart';
 import 'package:apdcpp/admin_panel/layar_laporan_apd_admin.dart';
 import 'package:apdcpp/admin_panel/layar_master_apd_admin.dart';
 import 'package:apdcpp/admin_panel/layar_persetujuan_apd_admin.dart';
+import 'package:apdcpp/admin_panel/layar_daftar_dokumen_admin.dart';
+import 'package:apdcpp/admin_panel/layar_tanda_tangan_admin.dart';
 import 'package:apdcpp/services/apd_api_service.dart';
 import 'package:apdcpp/services/notifikasi_laporan_admin_service.dart';
 import 'package:apdcpp/services/sesi_aplikasi_service.dart';
@@ -61,7 +63,6 @@ class _LayarDashboardAdminState extends State<LayarDashboardAdmin> {
 
   Timer? _sesiTimer;
   RealtimeChannel? _realtimeChannel;
-  int _notifikasiTerakhirCount = 0;
   final ApiApdService _api = const ApiApdService();
   @override
   void initState() {
@@ -893,6 +894,45 @@ class _TabAdminBerandaState extends State<TabAdminBeranda> {
                       ),
                     ],
                   ),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _menuButton(
+                        icon: Icons.description_outlined,
+                        label: 'Dokumen\nPengajuan',
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => LayarDaftarDokumenAdmin(
+                                username: widget.username,
+                              ),
+                            ),
+                          ).then((_) => _loadData());
+                        },
+                      ),
+                    ),
+                    Expanded(
+                      child: _menuButton(
+                        icon: Icons.draw_outlined,
+                        label: 'Tanda\nTangan',
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => LayarTandaTanganAdmin(
+                                username: widget.username,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const Expanded(child: SizedBox()),
+                    const Expanded(child: SizedBox()),
+                  ],
                 ),
               ],
             ),

@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import 'package:apdcpp/konfigurasi_api.dart';
 import 'package:apdcpp/services/apd_api_service.dart';
+import 'package:apdcpp/services/notifikasi_lokal_service.dart';
 import 'package:apdcpp/tema_aplikasi.dart';
 
 class LayarPersetujuanApdAdmin extends StatefulWidget {
@@ -35,7 +36,7 @@ class _LayarPersetujuanApdAdminState extends State<LayarPersetujuanApdAdmin> {
   void initState() {
     super.initState();
     _loadInit();
-    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 25), (_) {
+    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (!mounted || _loading || _prosesLoading) return;
       _loadData(preserveVisibleData: true, silent: true);
     });
@@ -77,33 +78,53 @@ class _LayarPersetujuanApdAdminState extends State<LayarPersetujuanApdAdmin> {
       _syncing = keepVisibleData;
     });
 
-    final response = await _api.semuaPengajuan(
-      statusPengajuan: 'Menunggu',
-      jabatan: _selectedJabatan.isEmpty ? null : _selectedJabatan,
-      tanggal: _selectedTanggal,
-    );
-    if (!mounted) return;
+    try {
+      final response = await _api.semuaPengajuan(
+        statusPengajuan: 'Menunggu',
+        jabatan: _selectedJabatan.isEmpty ? null : _selectedJabatan,
+        tanggal: _selectedTanggal,
+      );
+      if (!mounted) return;
 
-    if (_api.isSuccess(response)) {
+      if (_api.isSuccess(response)) {
+        setState(() {
+          _items = _api.extractListData(response);
+          _loading = false;
+          _syncing = false;
+        });
+        return;
+      }
+
       setState(() {
-        _items = _api.extractListData(response);
+        if (!keepVisibleData) {
+          _items = [];
+        }
         _loading = false;
         _syncing = false;
       });
-      return;
-    }
-
-    setState(() {
-      if (!keepVisibleData) {
-        _items = [];
+      if (silent) return;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_api.message(response)),
+            backgroundColor: TemaAplikasi.bahaya,
+          ),
+        );
       }
-      _loading = false;
-      _syncing = false;
-    });
-    if (silent) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(_api.message(response))));
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _syncing = false;
+      });
+      if (silent) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gagal memuat data: $e'),
+          backgroundColor: TemaAplikasi.bahaya,
+        ),
+      );
+    }
   }
 
   Future<void> _pickTanggal() async {
@@ -182,6 +203,9 @@ class _LayarPersetujuanApdAdminState extends State<LayarPersetujuanApdAdmin> {
   }) async {
     if (_prosesLoading) return;
 
+    // Simpan item untuk recovery jika gagal
+    final itemId = '${item['id_pengajuan']}';
+
     // Set loading state BEFORE async
     if (!mounted) return;
     setState(() {
@@ -189,13 +213,28 @@ class _LayarPersetujuanApdAdminState extends State<LayarPersetujuanApdAdmin> {
     });
 
     try {
-      final response = await _api.prosesPengajuan(
-        idPengajuan: '${item['id_pengajuan']}',
-        statusPengajuan: status,
-        usernameAdmin: widget.usernameAdmin,
-        catatanAdmin: catatan,
-        lokasiPengambilan: lokasiPengambilan,
-      );
+      // Cek tipe pengajuan (single vs dokumen)
+      final tipe = item['tipe']?.toString() ?? 'single';
+
+      // Normalisasi status menjadi lowercase untuk konsistensi
+      final statusLower = status.toLowerCase();
+      final statusDokumen = statusLower == 'disetujui' ? 'diterima' : statusLower;
+
+      final response = tipe == 'dokumen'
+          ? await _api.prosesDokumenPengajuan(
+              idDokumen: itemId,
+              status: statusDokumen,
+              usernameAdmin: widget.usernameAdmin,
+              catatan: catatan,
+              lokasiPengambilan: lokasiPengambilan,
+            )
+          : await _api.prosesPengajuan(
+              idPengajuan: itemId,
+              statusPengajuan: status,
+              usernameAdmin: widget.usernameAdmin,
+              catatanAdmin: catatan,
+              lokasiPengambilan: lokasiPengambilan,
+            );
 
       // Tampilkan feedback setelah async selesai
       if (!mounted) return;
@@ -213,6 +252,32 @@ class _LayarPersetujuanApdAdminState extends State<LayarPersetujuanApdAdmin> {
       }
 
       if (isSuccess) {
+        // Kirim notifikasi lokal ke HP (opsional - jika gagal tetap lanjut)
+        final namaApd = item['nama_apd']?.toString() ?? 'APD';
+
+        try {
+          if (status.toLowerCase() == 'disetujui' || status.toLowerCase() == 'diterima') {
+            final lokasi = lokasiPengambilan ?? 'lokasi yang ditentukan';
+            await NotifikasiLokalService.tampilkanNotifikasiStatusPengajuan(
+              status: 'Disetujui',
+              keterangan: 'Pengajuan $namaApd Anda telah disetujui. Silakan ambil di $lokasi.',
+            );
+          } else if (status.toLowerCase() == 'ditolak') {
+            await NotifikasiLokalService.tampilkanNotifikasiStatusPengajuan(
+              status: 'Ditolak',
+              keterangan: catatan ?? 'Pengajuan $namaApd Anda ditolak. Silakan ajukan ulang.',
+            );
+          }
+        } catch (_) {
+          // Abaikan error notifikasi - proses persetujuan tetap berhasil
+        }
+
+        // Refresh data setelah sukses - item akan hilang karena status berubah
+        if (mounted) {
+          await _loadData(preserveVisibleData: false);
+        }
+      } else {
+        // Jika gagal, tetap reload untuk memastikan data konsisten
         if (mounted) {
           await _loadData(preserveVisibleData: true);
         }
@@ -226,6 +291,8 @@ class _LayarPersetujuanApdAdminState extends State<LayarPersetujuanApdAdmin> {
             duration: const Duration(seconds: 3),
           ),
         );
+        // Reload data untuk recovery
+        await _loadData(preserveVisibleData: true);
       }
     } finally {
       // Reset loading state (paling aman: cek mounted dulu)
@@ -325,22 +392,6 @@ class _LayarPersetujuanApdAdminState extends State<LayarPersetujuanApdAdmin> {
     return int.tryParse('${value ?? fallback}') ?? fallback;
   }
 
-  Color _stokColor(Map<String, dynamic> item) {
-    final stok = _toInt(item['stok_tersedia']);
-    final minStok = _toInt(item['min_stok'], fallback: 1);
-    if (stok <= 0) return TemaAplikasi.bahaya;
-    if (stok <= minStok) return TemaAplikasi.emasTua;
-    return TemaAplikasi.sukses;
-  }
-
-  String _stokLabel(Map<String, dynamic> item) {
-    final stok = _toInt(item['stok_tersedia']);
-    final minStok = _toInt(item['min_stok']);
-    if (stok <= 0) return 'Stok kosong';
-    if (stok <= minStok) return 'Stok menipis';
-    return 'Stok aman';
-  }
-
   String _cooldownLabel(Map<String, dynamic> item) {
     final hari = _toInt(item['cooldown_pengajuan_hari'], fallback: 30);
     if (hari == 0) return 'Tanpa masa tunggu';
@@ -352,7 +403,6 @@ class _LayarPersetujuanApdAdminState extends State<LayarPersetujuanApdAdmin> {
     final tanggalText = item['tanggal_pengajuan']?.toString() ?? '';
     final tanggal = DateTime.tryParse(tanggalText.replaceFirst(' ', 'T'));
     final buktiFoto = buildUploadUrl(item['bukti_foto']?.toString());
-    final stokWarna = _stokColor(item);
 
     showModalBottomSheet<void>(
       context: context,
@@ -402,11 +452,6 @@ class _LayarPersetujuanApdAdminState extends State<LayarPersetujuanApdAdmin> {
                       _DetailChip(
                         warna: Colors.blue,
                         label: 'Menunggu Persetujuan',
-                      ),
-                      _DetailChip(
-                        warna: stokWarna,
-                        label:
-                            '${_stokLabel(item)} (${_toInt(item['stok_tersedia'])})',
                       ),
                       _DetailChip(
                         warna: TemaAplikasi.emasTua,
@@ -487,89 +532,8 @@ class _LayarPersetujuanApdAdminState extends State<LayarPersetujuanApdAdmin> {
                     ),
                   ],
                   const SizedBox(height: 18),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: _prosesLoading
-                              ? null
-                              : () async {
-                                  // Munculkan dialog konfirmasi/input
-                                  final hasil =
-                                      await _inputPenerimaanPengajuan();
-                                  if (hasil == null) return;
-                                  if (!mounted) return;
-
-                                  // Tutup keyboard
-                                  FocusManager.instance.primaryFocus?.unfocus();
-
-                                  // Tutup bottom sheet SEKARANG
-                                  if (!mounted) return;
-                                  Navigator.of(context).pop();
-
-                                  // Tunggu sedikit agar Navigator stack stabil
-                                  await Future.delayed(const Duration(milliseconds: 50));
-
-                                  // Kirim ke server via API (hanya jika masih mounted)
-                                  if (!mounted) return;
-                                  await _prosesStatus(
-                                    item: item,
-                                    status: 'Disetujui',
-                                    catatan: hasil.catatan.isEmpty
-                                        ? 'Pengajuan disetujui'
-                                        : hasil.catatan,
-                                    lokasiPengambilan: hasil.lokasi,
-                                  );
-                                },
-                          icon: const Icon(
-                            Icons.check_circle_outline,
-                            size: 18,
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: TemaAplikasi.sukses,
-                            foregroundColor: Colors.white,
-                          ),
-                          label: const Text('Terima'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: _prosesLoading
-                              ? null
-                              : () async {
-                                  // Munculkan dialog konfirmasi alasan
-                                  final alasan = await _inputCatatanPenolakan();
-                                  if (alasan == null || alasan.isEmpty) return;
-                                  if (!mounted) return;
-
-                                  // Tutup keyboard
-                                  FocusManager.instance.primaryFocus?.unfocus();
-
-                                  // Tutup bottom sheet SEKARANG
-                                  if (!mounted) return;
-                                  Navigator.of(context).pop();
-
-                                  // Tunggu sedikit agar Navigator stack stabil
-                                  await Future.delayed(const Duration(milliseconds: 50));
-
-                                  // Kirim ke server via API (hanya jika masih mounted)
-                                  if (!mounted) return;
-                                  await _prosesStatus(
-                                    item: item,
-                                    status: 'Ditolak',
-                                    catatan: alasan,
-                                  );
-                                },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: TemaAplikasi.bahaya,
-                            foregroundColor: Colors.white,
-                          ),
-                          child: const Text('Tolak'),
-                        ),
-                      ),
-                    ],
-                  ),
+                  // Cek tipe pengajuan untuk menentukan tombol aksi
+                  _buildTombolAksi(item),
                 ],
               ),
             ),
@@ -577,6 +541,180 @@ class _LayarPersetujuanApdAdminState extends State<LayarPersetujuanApdAdmin> {
         ),
       ),
     );
+  }
+
+  Widget _buildTombolAksi(Map<String, dynamic> item) {
+    final tipe = item['tipe']?.toString() ?? 'single';
+
+    if (tipe == 'dokumen') {
+      // Sistem baru: Dokumen Pengajuan - Terima dengan input lokasi
+      return Row(
+        children: [
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: _prosesLoading
+                  ? null
+                  : () async {
+                      // Input lokasi pengambilan + catatan
+                      final hasil = await _inputPenerimaanPengajuan();
+                      if (hasil == null) return; // User batal
+                      if (!mounted) return;
+
+                      // Tutup bottom sheet
+                      Navigator.of(context).pop();
+
+                      // Tunggu sedikit agar Navigator stack stabil
+                      await Future.delayed(const Duration(milliseconds: 50));
+
+                      // Kirim ke server via API (hanya jika masih mounted)
+                      if (!mounted) return;
+                      await _prosesStatus(
+                        item: item,
+                        status: 'Disetujui',
+                        catatan: hasil.catatan.isEmpty
+                            ? 'Silakan ambil di ${hasil.lokasi}'
+                            : 'Silakan ambil di ${hasil.lokasi}. ${hasil.catatan}',
+                        lokasiPengambilan: hasil.lokasi,
+                      );
+                    },
+              icon: const Icon(
+                Icons.check_circle_outline,
+                size: 18,
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: TemaAplikasi.sukses,
+                foregroundColor: Colors.white,
+              ),
+              label: const Text('Terima'),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: _prosesLoading
+                  ? null
+                  : () async {
+                      // Input alasan penolakan
+                      final alasan = await _inputCatatanPenolakan();
+                      if (alasan == null || alasan.isEmpty) return;
+                      if (!mounted) return;
+
+                      // Tutup bottom sheet
+                      Navigator.of(context).pop();
+
+                      // Tunggu sedikit
+                      await Future.delayed(const Duration(milliseconds: 50));
+
+                      // Proses penolakan
+                      if (!mounted) return;
+                      await _prosesStatus(
+                        item: item,
+                        status: 'Ditolak',
+                        catatan: alasan,
+                      );
+                    },
+              icon: const Icon(
+                Icons.cancel_outlined,
+                size: 18,
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: TemaAplikasi.bahaya,
+                foregroundColor: Colors.white,
+              ),
+              label: const Text('Tolak'),
+            ),
+          ),
+        ],
+      );
+    } else {
+      // Sistem lama: Pengajuan Single - Perlu input lokasi
+      return Row(
+        children: [
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: _prosesLoading
+                  ? null
+                  : () async {
+                      // Munculkan dialog konfirmasi/input
+                      final hasil = await _inputPenerimaanPengajuan();
+                      if (hasil == null) return;
+                      if (!mounted) return;
+
+                      // Tutup keyboard
+                      FocusManager.instance.primaryFocus?.unfocus();
+
+                      // Tutup bottom sheet SEKARANG
+                      if (!mounted) return;
+                      Navigator.of(context).pop();
+
+                      // Tunggu sedikit agar Navigator stack stabil
+                      await Future.delayed(const Duration(milliseconds: 50));
+
+                      // Kirim ke server via API (hanya jika masih mounted)
+                      if (!mounted) return;
+                      await _prosesStatus(
+                        item: item,
+                        status: 'Disetujui',
+                        catatan: hasil.catatan.isEmpty
+                            ? 'Pengajuan disetujui'
+                            : hasil.catatan,
+                        lokasiPengambilan: hasil.lokasi,
+                      );
+                    },
+              icon: const Icon(
+                Icons.check_circle_outline,
+                size: 18,
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: TemaAplikasi.sukses,
+                foregroundColor: Colors.white,
+              ),
+              label: const Text('Terima'),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: _prosesLoading
+                  ? null
+                  : () async {
+                      // Input alasan penolakan
+                      final alasan = await _inputCatatanPenolakan();
+                      if (alasan == null || alasan.isEmpty) return;
+                      if (!mounted) return;
+
+                      // Tutup keyboard
+                      FocusManager.instance.primaryFocus?.unfocus();
+
+                      // Tutup bottom sheet SEKARANG
+                      if (!mounted) return;
+                      Navigator.of(context).pop();
+
+                      // Tunggu sedikit agar Navigator stack stabil
+                      await Future.delayed(const Duration(milliseconds: 50));
+
+                      // Kirim ke server via API (hanya jika masih mounted)
+                      if (!mounted) return;
+                      await _prosesStatus(
+                        item: item,
+                        status: 'Ditolak',
+                        catatan: alasan,
+                      );
+                    },
+              icon: const Icon(
+                Icons.cancel_outlined,
+                size: 18,
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: TemaAplikasi.bahaya,
+                foregroundColor: Colors.white,
+              ),
+              label: const Text('Tolak'),
+            ),
+          ),
+        ],
+      );
+    }
   }
 
   @override
@@ -687,7 +825,6 @@ class _LayarPersetujuanApdAdminState extends State<LayarPersetujuanApdAdmin> {
                 final tanggal = DateTime.tryParse(
                   tanggalText.replaceFirst(' ', 'T'),
                 );
-                final stokWarna = _stokColor(item);
 
                 return Card(
                   margin: const EdgeInsets.only(bottom: 12),
@@ -738,11 +875,6 @@ class _LayarPersetujuanApdAdminState extends State<LayarPersetujuanApdAdmin> {
                               _DetailChip(
                                 warna: Colors.blue,
                                 label: '${item['jabatan'] ?? '-'}',
-                              ),
-                              _DetailChip(
-                                warna: stokWarna,
-                                label:
-                                    '${_stokLabel(item)} (${_toInt(item['stok_tersedia'])})',
                               ),
                               _DetailChip(
                                 warna: TemaAplikasi.emasTua,

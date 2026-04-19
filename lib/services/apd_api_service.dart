@@ -104,6 +104,7 @@ class ApiApdService {
         return 'Menunggu';
       case 'diproses':
       case 'disetujui':
+      case 'diterima': // Tambahkan untuk dukungan dokumen_pengajuan
         return 'Disetujui';
       case 'ditolak':
         return 'Ditolak';
@@ -120,6 +121,7 @@ class ApiApdService {
         return 'menunggu';
       case 'disetujui':
       case 'diproses':
+      case 'diterima':
         return 'diproses';
       case 'ditolak':
         return 'ditolak';
@@ -182,6 +184,7 @@ class ApiApdService {
     final normalized = _normalizeStatus(rawStatus?.toString());
     return normalized == 'diproses' ||
         normalized == 'disetujui' ||
+        normalized == 'diterima' ||
         normalized == 'selesai';
   }
 
@@ -511,7 +514,6 @@ class ApiApdService {
               .eq('id', res['id'])
               .timeout(const Duration(seconds: 10));
 
-          final nama = _readText(res['nama_lengkap'], fallback: user);
           // Auto-insert removed to prevent blank tickets interfering with actual employee submissions.
 
           return {
@@ -969,18 +971,21 @@ class ApiApdService {
           .maybeSingle();
       if (karyawan == null) return {'status': 'sukses', 'data': []};
 
-      final res = await _supabase
+      final idKaryawan = _readText(karyawan['id']);
+
+      // Ambil data dari sistem lama (tabel pengajuan)
+      final resLama = await _supabase
           .from('pengajuan')
           .select()
-          .eq('id_karyawan', karyawan['id'])
+          .eq('id_karyawan', idKaryawan)
           .order('tanggal_pengajuan', ascending: false);
 
-      final rows = _asMapList(res);
-      final apdIds = rows
+      final rowsLama = _asMapList(resLama);
+      final apdIds = rowsLama
           .map((row) => _readText(row['id_apd']))
           .where((id) => id.isNotEmpty)
           .toSet();
-      final adminIds = rows
+      final adminIds = rowsLama
           .map((row) => _readText(row['id_admin']))
           .where((id) => id.isNotEmpty)
           .toSet();
@@ -996,12 +1001,23 @@ class ApiApdService {
         selectColumns: 'id,nama_lengkap',
       );
 
-      final mapped = rows.map((row) {
+      // Ambil data dari sistem baru (tabel dokumen_pengajuan)
+      final resBaru = await _supabase
+          .from('dokumen_pengajuan')
+          .select('*, karyawan(username,nama_lengkap,jabatan,departemen,lokasi_kerja)')
+          .eq('id_karyawan', idKaryawan)
+          .order('tanggal_pengajuan', ascending: false);
+
+      final rowsBaru = _asMapList(resBaru);
+
+      // Mapping data dari sistem lama
+      final mappedLama = rowsLama.map((row) {
         final apd = apdMap[_readText(row['id_apd'])];
         final admin = adminMap[_readText(row['id_admin'])];
         return <String, dynamic>{
           ...row,
           'id_pengajuan': _readText(row['id']),
+          'tipe': 'single', // Penanda sistem lama
           'nama_apd': _readText(
             apd?['nama_apd'],
             fallback: _readText(row['nama_apd'], fallback: '-'),
@@ -1023,7 +1039,66 @@ class ApiApdService {
         };
       }).toList();
 
-      return {'status': 'sukses', 'data': mapped};
+      // Mapping data dari sistem baru (dokumen_pengajuan)
+      final mappedBaru = <Map<String, dynamic>>[];
+      for (final dokumen in rowsBaru) {
+        final idDokumen = _readText(dokumen['id']);
+
+        // Ambil item-item APD dari dokumen ini
+        final itemRows = await _supabase
+            .from('dokumen_pengajuan_item')
+            .select('id_apd,ukuran,alasan,jumlah')
+            .eq('id_pengajuan', idDokumen);
+
+        final items = _asMapList(itemRows);
+        final itemApdIds = items
+            .map((item) => _readText(item['id_apd']))
+            .where((id) => id.isNotEmpty)
+            .toSet();
+
+        final apdMapBaru = await _loadMapByIds(
+          table: 'apd',
+          ids: itemApdIds,
+          selectColumns: 'id,nama_apd,satuan',
+        );
+
+        // Untuk setiap item, buat entry terpisah di riwayat
+        for (final item in items) {
+          final apd = apdMapBaru[_readText(item['id_apd'])];
+          mappedBaru.add({
+            'id_pengajuan': idDokumen, // ID dokumen, bukan ID item
+            'tipe': 'dokumen', // Penanda sistem baru
+            'nama_apd': _readText(
+              apd?['nama_apd'],
+              fallback: '-',
+            ),
+            'status_pengajuan': _displayStatusPengajuan(dokumen['status']),
+            'tanggal_pengajuan': _readText(dokumen['tanggal_pengajuan']),
+            'tanggal_diproses': _readText(dokumen['tanggal_proses']),
+            'tanggal_proses': _readText(dokumen['tanggal_proses']),
+            'ukuran': _readText(item['ukuran']),
+            'alasan_pengajuan': _readText(item['alasan']),
+            'catatan_admin': _readText(dokumen['catatan_admin']),
+            'jumlah_pengajuan': item['jumlah'] ?? 1,
+            'satuan': _readText(apd?['satuan'], fallback: 'pcs'),
+            'bukti_foto': null, // Dokumen baru tidak ada bukti foto
+            'lokasi_pengambilan': null, // Lokasi pengambilan ada di sistem penerimaan
+          });
+        }
+      }
+
+      // Gabungkan dan sort berdasarkan tanggal pengajuan
+      final allData = [...mappedLama, ...mappedBaru];
+      allData.sort((a, b) {
+        final tanggalA = _parseDate(a['tanggal_pengajuan']);
+        final tanggalB = _parseDate(b['tanggal_pengajuan']);
+        if (tanggalA == null && tanggalB == null) return 0;
+        if (tanggalA == null) return 1;
+        if (tanggalB == null) return -1;
+        return tanggalB.compareTo(tanggalA);
+      });
+
+      return {'status': 'sukses', 'data': allData};
     } catch (e) {
       return {'status': 'gagal', 'pesan': 'Error: $e'};
     }
@@ -1037,7 +1112,8 @@ class ApiApdService {
     DateTime? tanggal,
   }) async {
     try {
-      final query = _supabase
+      // === SISTEM LAMA: Tabel pengajuan ===
+      final queryLama = _supabase
           .from('pengajuan')
           .select(
             '*, apd(nama_apd,stok,min_stok,satuan), '
@@ -1045,11 +1121,11 @@ class ApiApdService {
             'admin(nama_lengkap)',
           );
 
-      final res = await query.order('tanggal_pengajuan', ascending: false);
-      final rows = _asMapList(res);
-      final mapped = <Map<String, dynamic>>[];
+      final resLama = await queryLama.order('tanggal_pengajuan', ascending: false);
+      final rowsLama = _asMapList(resLama);
+      final mappedLama = <Map<String, dynamic>>[];
 
-      for (final row in rows) {
+      for (final row in rowsLama) {
         if (!_matchFilterPengajuan(row['status_pengajuan'], statusPengajuan)) {
           continue;
         }
@@ -1079,9 +1155,10 @@ class ApiApdService {
           continue;
         }
 
-        mapped.add({
+        mappedLama.add({
           ...row,
           'id_pengajuan': _readText(row['id']),
+          'tipe': 'single', // Penanda sistem lama
           'status_pengajuan': _displayStatusPengajuan(row['status_pengajuan']),
           'tanggal_diproses': _readText(
             row['tanggal_diproses'],
@@ -1103,7 +1180,108 @@ class ApiApdService {
         });
       }
 
-      return {'status': 'sukses', 'data': mapped};
+      // === SISTEM BARU: Tabel dokumen_pengajuan + dokumen_pengajuan_item ===
+      final queryBaru = _supabase
+          .from('dokumen_pengajuan')
+          .select(
+            '*, karyawan(username,nama_lengkap,jabatan,departemen,lokasi_kerja,cooldown_pengajuan_hari,foto_profil), '
+            'admin(nama_lengkap)',
+          );
+
+      final resBaru = await queryBaru.order('tanggal_pengajuan', ascending: false);
+      final rowsBaru = _asMapList(resBaru);
+      final mappedBaru = <Map<String, dynamic>>[];
+
+      for (final dokumen in rowsBaru) {
+        // Filter status
+        if (!_matchFilterPengajuan(dokumen['status'], statusPengajuan)) {
+          continue;
+        }
+
+        final karyawan = dokumen['karyawan'] is Map
+            ? Map<String, dynamic>.from(dokumen['karyawan'] as Map)
+            : const <String, dynamic>{};
+        final admin = dokumen['admin'] is Map
+            ? Map<String, dynamic>.from(dokumen['admin'] as Map)
+            : const <String, dynamic>{};
+
+        if (_readText(jabatan).isNotEmpty &&
+            _normalizeStatus(_readText(karyawan['jabatan'])) !=
+                _normalizeStatus(_readText(jabatan))) {
+          continue;
+        }
+
+        final tanggalPengajuan = _parseDate(dokumen['tanggal_pengajuan']);
+        if (tanggal != null &&
+            !_inDateRange(tanggalPengajuan, tanggal, tanggal)) {
+          continue;
+        }
+        if (!_inDateRange(tanggalPengajuan, start, end)) {
+          continue;
+        }
+
+        // Ambil item-item APD dari dokumen ini
+        final idDokumen = _readText(dokumen['id']);
+        final itemRows = await _supabase
+            .from('dokumen_pengajuan_item')
+            .select('id_apd,ukuran,alasan,jumlah')
+            .eq('id_pengajuan', idDokumen);
+
+        final items = _asMapList(itemRows);
+        final itemApdIds = items
+            .map((item) => _readText(item['id_apd']))
+            .where((id) => id.isNotEmpty)
+            .toSet();
+
+        final apdMap = await _loadMapByIds(
+          table: 'apd',
+          ids: itemApdIds,
+          selectColumns: 'id,nama_apd,stok,min_stok,satuan',
+        );
+
+        // Untuk setiap item, buat entry terpisah
+        for (final item in items) {
+          final apd = apdMap[_readText(item['id_apd'])];
+          if (apd == null) continue;
+
+          mappedBaru.add({
+            'id_pengajuan': idDokumen, // ID dokumen
+            'tipe': 'dokumen', // Penanda sistem baru
+            'status_pengajuan': _displayStatusPengajuan(dokumen['status']),
+            'tanggal_pengajuan': _readText(dokumen['tanggal_pengajuan']),
+            'tanggal_diproses': _readText(dokumen['tanggal_proses']),
+            'username_karyawan': _readText(karyawan['username']),
+            'nama_lengkap': _readText(karyawan['nama_lengkap'], fallback: '-'),
+            'jabatan': _readText(karyawan['jabatan'], fallback: '-'),
+            'departemen': _readText(karyawan['departemen'], fallback: '-'),
+            'lokasi_kerja': _readText(karyawan['lokasi_kerja'], fallback: '-'),
+            'foto_profil': _readText(karyawan['foto_profil']),
+            'cooldown_pengajuan_hari': karyawan['cooldown_pengajuan_hari'] ?? 0,
+            'nama_apd': _readText(apd['nama_apd'], fallback: '-'),
+            'stok_tersedia': apd['stok'] ?? 0,
+            'min_stok': apd['min_stok'] ?? 0,
+            'satuan': _readText(apd['satuan'], fallback: 'pcs'),
+            'jumlah_pengajuan': item['jumlah'] ?? 1,
+            'ukuran': _readText(item['ukuran']),
+            'alasan_pengajuan': _readText(item['alasan']),
+            'catatan_admin': _readText(dokumen['catatan_admin']),
+            'nama_admin_proses': _readText(admin['nama_lengkap']),
+          });
+        }
+      }
+
+      // Gabungkan data dari kedua sistem dan sort berdasarkan tanggal
+      final allData = [...mappedLama, ...mappedBaru];
+      allData.sort((a, b) {
+        final tanggalA = _parseDate(a['tanggal_pengajuan']);
+        final tanggalB = _parseDate(b['tanggal_pengajuan']);
+        if (tanggalA == null && tanggalB == null) return 0;
+        if (tanggalA == null) return 1;
+        if (tanggalB == null) return -1;
+        return tanggalB.compareTo(tanggalA);
+      });
+
+      return {'status': 'sukses', 'data': allData};
     } catch (e) {
       return {'status': 'gagal', 'pesan': 'Error: $e'};
     }
@@ -1170,12 +1348,7 @@ class ApiApdService {
             final stokSaatIni = int.tryParse('${apd['stok'] ?? 0}') ?? 0;
             // Gunakan jumlah untuk mengurangi stok sesuai jumlah yang diminta
             final jumlahDiminta = int.tryParse('${existing['jumlah'] ?? 1}') ?? 1;
-            if (stokSaatIni < jumlahDiminta) {
-              return {
-                'status': 'gagal',
-                'pesan': 'Stok APD tidak mencukupi (tersedia: $stokSaatIni, diminta: $jumlahDiminta)',
-              };
-            }
+            // Langsung kurangi stok tanpa validasi
             await _supabase
                 .from('apd')
                 .update({'stok': stokSaatIni - jumlahDiminta})
@@ -1210,7 +1383,7 @@ class ApiApdService {
 
         String judul = 'Update Pengajuan APD';
         String pesan = 'Status pengajuan $namaApd Anda telah diperbarui.';
-        if (statusDb == 'diproses') {
+        if (statusDb == 'disetujui' || statusDb == 'diterima') {
           judul = 'Pengajuan APD Disetujui';
           pesan = 'Pengajuan $namaApd Anda telah disetujui admin.';
         } else if (statusDb == 'ditolak') {
@@ -2298,6 +2471,7 @@ class ApiApdService {
           .eq('is_dibaca', false);
       final notifBelumDibaca = _asMapList(notifikasi).length;
 
+      // Ambil data dari sistem lama (tabel pengajuan)
       final pengajuanRows = await _supabase
           .from('pengajuan')
           .select(
@@ -2308,9 +2482,70 @@ class ApiApdService {
           .order('tanggal_pengajuan', ascending: false)
           .limit(1);
 
+      // Ambil data dari sistem baru (tabel dokumen_pengajuan)
+      final dokumenRows = await _supabase
+          .from('dokumen_pengajuan')
+          .select(
+            'id,tanggal_pengajuan,status,catatan_admin,tanggal_proses',
+          )
+          .eq('id_karyawan', idKaryawan)
+          .order('tanggal_pengajuan', ascending: false)
+          .limit(1);
+
       Map<String, dynamic>? pengajuanTerakhir;
       final pengajuanList = _asMapList(pengajuanRows);
+      final dokumenList = _asMapList(dokumenRows);
+
+      // Tentukan mana yang lebih baru
+      DateTime? tanggalPengajuanLama;
+      DateTime? tanggalDokumenBaru;
+
       if (pengajuanList.isNotEmpty) {
+        tanggalPengajuanLama = _parseDate(
+          _readText(pengajuanList.first['tanggal_pengajuan']),
+        );
+      }
+      if (dokumenList.isNotEmpty) {
+        tanggalDokumenBaru = _parseDate(
+          _readText(dokumenList.first['tanggal_pengajuan']),
+        );
+      }
+
+      // Gunakan yang lebih baru
+      bool gunakanDokumenBaru = false;
+      if (tanggalDokumenBaru != null && tanggalPengajuanLama != null) {
+        gunakanDokumenBaru = tanggalDokumenBaru.isAfter(tanggalPengajuanLama);
+      } else if (tanggalDokumenBaru != null) {
+        gunakanDokumenBaru = true;
+      }
+
+      if (dokumenList.isNotEmpty && gunakanDokumenBaru) {
+        // Gunakan data dari dokumen_pengajuan (sistem baru)
+        final dok = dokumenList.first;
+        final idDokumen = _readText(dok['id']);
+
+        // Ambil jumlah item
+        final itemRows = await _supabase
+            .from('dokumen_pengajuan_item')
+            .select('id_apd')
+            .eq('id_pengajuan', idDokumen);
+        final jumlahItem = _asMapList(itemRows).length;
+
+        pengajuanTerakhir = {
+          'id_pengajuan': idDokumen,
+          'tipe': 'dokumen', // Penanda tipe pengajuan
+          'nama_apd': '$jumlahItem item APD', // Tampilkan jumlah item
+          'status_pengajuan_raw': _normalizeStatus(dok['status']?.toString()),
+          'status_pengajuan': _displayStatusPengajuan(dok['status']),
+          'tanggal_pengajuan': _readText(dok['tanggal_pengajuan']),
+          'tanggal_proses': _readText(dok['tanggal_proses']),
+          'ukuran': '-',
+          'alasan_pengajuan': 'Dokumen pengajuan multi-item',
+          'catatan_admin': _readText(dok['catatan_admin']),
+          'lokasi_pengambilan': '-',
+        };
+      } else if (pengajuanList.isNotEmpty) {
+        // Gunakan data dari pengajuan (sistem lama)
         final row = pengajuanList.first;
         String namaApd = '-';
         final idApd = _readText(row['id_apd']);
@@ -2324,6 +2559,7 @@ class ApiApdService {
         }
         pengajuanTerakhir = {
           'id_pengajuan': _readText(row['id']),
+          'tipe': 'single', // Penanda tipe pengajuan
           'nama_apd': namaApd,
           'status_pengajuan_raw': _normalizeStatus(
             row['status_pengajuan']?.toString(),
@@ -3689,4 +3925,605 @@ class ApiApdService {
       return {'status': 'gagal', 'pesan': 'Gagal memperbarui profil admin: $e'};
     }
   }
+
+  // ============================================================
+  // DOKUMEN PENGAJUAN APD (Multi-APD + Tanda Tangan)
+  // ============================================================
+
+  /// Menyimpan dokumen pengajuan APD multi-item dengan tanda tangan karyawan.
+  Future<Map<String, dynamic>> simpanDokumenPengajuan({
+    required String username,
+    required List<Map<String, dynamic>> items,
+    required String tandaTanganKaryawan,
+  }) async {
+    try {
+      if (items.isEmpty) {
+        return {'status': 'gagal', 'pesan': 'Pilih minimal 1 APD'};
+      }
+      if (tandaTanganKaryawan.isEmpty) {
+        return {'status': 'gagal', 'pesan': 'Tanda tangan karyawan wajib diisi'};
+      }
+
+      final karyawan = await _supabase
+          .from('karyawan')
+          .select('id')
+          .eq('username', username)
+          .maybeSingle();
+      if (karyawan == null) {
+        return {'status': 'gagal', 'pesan': 'Karyawan tidak valid'};
+      }
+
+      // Validasi stok semua APD
+      for (final item in items) {
+        final idApd = _readText(item['id_apd']);
+        if (idApd.isEmpty) {
+          return {'status': 'gagal', 'pesan': 'ID APD tidak valid'};
+        }
+        final apd = await _supabase
+            .from('apd')
+            .select('id,stok,is_aktif,nama_apd')
+            .eq('id', idApd)
+            .maybeSingle();
+        if (apd == null) {
+          return {'status': 'gagal', 'pesan': 'APD tidak ditemukan'};
+        }
+        if (!_isTrue(apd['is_aktif'])) {
+          return {
+            'status': 'gagal',
+            'pesan': 'APD "${apd['nama_apd']}" sedang dinonaktifkan',
+          };
+        }
+        final stok = int.tryParse('${apd['stok'] ?? 0}') ?? 0;
+        final jumlah = int.tryParse('${item['jumlah'] ?? 1}') ?? 1;
+        if (stok < jumlah) {
+          return {
+            'status': 'gagal',
+            'pesan':
+                'Stok APD "${apd['nama_apd']}" tidak mencukupi (tersedia: $stok)',
+          };
+        }
+      }
+
+      // Insert dokumen utama
+      final dokumenResult = await _supabase
+          .from('dokumen_pengajuan')
+          .insert({
+            'id_karyawan': karyawan['id'],
+            'tanda_tangan_karyawan': tandaTanganKaryawan,
+            'status': 'menunggu',
+          })
+          .select('id')
+          .single();
+
+      final idDokumen = _readText(dokumenResult['id']);
+
+      // Insert semua item APD
+      for (final item in items) {
+        await _supabase.from('dokumen_pengajuan_item').insert({
+          'id_pengajuan': idDokumen,
+          'id_apd': _readText(item['id_apd']),
+          'ukuran': _readText(item['ukuran']),
+          'alasan': _readText(item['alasan']),
+          'jumlah': int.tryParse('${item['jumlah'] ?? 1}') ?? 1,
+        });
+      }
+
+      return {
+        'status': 'sukses',
+        'pesan': 'Dokumen pengajuan APD berhasil dikirim',
+        'data': {'id_pengajuan': idDokumen},
+      };
+    } catch (e) {
+      return {'status': 'gagal', 'pesan': 'Gagal menyimpan dokumen: $e'};
+    }
+  }
+
+  /// Mengambil daftar semua dokumen pengajuan (untuk admin).
+  Future<Map<String, dynamic>> daftarDokumenPengajuan({
+    String? filterStatus,
+  }) async {
+    try {
+      var query = _supabase
+          .from('dokumen_pengajuan')
+          .select('*')
+          .order('tanggal_pengajuan', ascending: false);
+
+      if (filterStatus != null && filterStatus.isNotEmpty) {
+        query = _supabase
+            .from('dokumen_pengajuan')
+            .select('*')
+            .eq('status', filterStatus)
+            .order('tanggal_pengajuan', ascending: false);
+      }
+
+      final rows = _asMapList(await query);
+
+      // Enrich with karyawan & item info
+      final enriched = <Map<String, dynamic>>[];
+      for (final row in rows) {
+        final idKaryawan = _readText(row['id_karyawan']);
+        final idDokumen = _readText(row['id']);
+
+        // Ambil data karyawan
+        String namaKaryawan = '-';
+        String departemen = '-';
+        String jabatan = '-';
+        if (idKaryawan.isNotEmpty) {
+          final karyawan = await _supabase
+              .from('karyawan')
+              .select('nama_lengkap,departemen,jabatan')
+              .eq('id', idKaryawan)
+              .maybeSingle();
+          namaKaryawan =
+              _readText(karyawan?['nama_lengkap'], fallback: '-');
+          departemen = _readText(karyawan?['departemen'], fallback: '-');
+          jabatan = _readText(karyawan?['jabatan'], fallback: '-');
+        }
+
+        // Ambil jumlah item
+        final itemRows = _asMapList(
+          await _supabase
+              .from('dokumen_pengajuan_item')
+              .select('id')
+              .eq('id_pengajuan', idDokumen),
+        );
+
+        // Ambil nama admin (jika sudah diproses)
+        String namaAdmin = '-';
+        final idAdmin = _readText(row['id_admin']);
+        if (idAdmin.isNotEmpty) {
+          final admin = await _supabase
+              .from('admin')
+              .select('nama_lengkap')
+              .eq('id', idAdmin)
+              .maybeSingle();
+          namaAdmin = _readText(admin?['nama_lengkap'], fallback: '-');
+        }
+
+        enriched.add({
+          ...row.map((key, value) => MapEntry('$key', value)),
+          'nama_karyawan': namaKaryawan,
+          'departemen': departemen,
+          'jabatan': jabatan,
+          'jumlah_item': itemRows.length,
+          'nama_admin': namaAdmin,
+        });
+      }
+
+      return {'status': 'sukses', 'data': enriched};
+    } catch (e) {
+      return {'status': 'gagal', 'pesan': 'Gagal memuat dokumen: $e'};
+    }
+  }
+
+  /// Mengambil detail lengkap satu dokumen pengajuan beserta item-itemnya.
+  Future<Map<String, dynamic>> detailDokumenPengajuan(String idDokumen) async {
+    try {
+      final dokumen = await _supabase
+          .from('dokumen_pengajuan')
+          .select('*')
+          .eq('id', idDokumen)
+          .maybeSingle();
+      if (dokumen == null) {
+        return {'status': 'gagal', 'pesan': 'Dokumen tidak ditemukan'};
+      }
+
+      // Ambil data karyawan
+      final idKaryawan = _readText(dokumen['id_karyawan']);
+      Map<String, dynamic> profilKaryawan = {};
+      if (idKaryawan.isNotEmpty) {
+        final karyawan = await _supabase
+            .from('karyawan')
+            .select(
+              'id,username,nama_lengkap,jabatan,departemen,lokasi_kerja',
+            )
+            .eq('id', idKaryawan)
+            .maybeSingle();
+        if (karyawan != null) {
+          profilKaryawan =
+              karyawan.map((key, value) => MapEntry('$key', value));
+        }
+      }
+
+      // Ambil item-item APD
+      final itemRows = _asMapList(
+        await _supabase
+            .from('dokumen_pengajuan_item')
+            .select('*')
+            .eq('id_pengajuan', idDokumen),
+      );
+
+      final enrichedItems = <Map<String, dynamic>>[];
+      for (final item in itemRows) {
+        final idApd = _readText(item['id_apd']);
+        String namaApd = '-';
+        String satuan = 'pcs';
+        if (idApd.isNotEmpty) {
+          final apd = await _supabase
+              .from('apd')
+              .select('nama_apd,satuan')
+              .eq('id', idApd)
+              .maybeSingle();
+          namaApd = _readText(apd?['nama_apd'], fallback: '-');
+          satuan = _readText(apd?['satuan'], fallback: 'pcs');
+        }
+        enrichedItems.add({
+          ...item.map((key, value) => MapEntry('$key', value)),
+          'nama_apd': namaApd,
+          'satuan': satuan,
+        });
+      }
+
+      // Ambil data admin (jika ada)
+      Map<String, dynamic> profilAdmin = {};
+      final idAdmin = _readText(dokumen['id_admin']);
+      if (idAdmin.isNotEmpty) {
+        final admin = await _supabase
+            .from('admin')
+            .select('id,nama_lengkap')
+            .eq('id', idAdmin)
+            .maybeSingle();
+        if (admin != null) {
+          profilAdmin = admin.map((key, value) => MapEntry('$key', value));
+        }
+      }
+
+      return {
+        'status': 'sukses',
+        'data': {
+          'dokumen':
+              dokumen.map((key, value) => MapEntry('$key', value)),
+          'karyawan': profilKaryawan,
+          'admin': profilAdmin,
+          'items': enrichedItems,
+        },
+      };
+    } catch (e) {
+      return {'status': 'gagal', 'pesan': 'Gagal memuat detail dokumen: $e'};
+    }
+  }
+
+  /// Admin memproses dokumen pengajuan (terima/tolak).
+  Future<Map<String, dynamic>> prosesDokumenPengajuan({
+    required String idDokumen,
+    required String status,
+    required String usernameAdmin,
+    String? catatan,
+    String? lokasiPengambilan,
+  }) async {
+    try {
+      final admin = await _supabase
+          .from('admin')
+          .select('id,nama_lengkap,tanda_tangan')
+          .eq('username', usernameAdmin)
+          .maybeSingle();
+      if (admin == null) {
+        return {'status': 'gagal', 'pesan': 'Admin tidak valid'};
+      }
+
+      final dokumen = await _supabase
+          .from('dokumen_pengajuan')
+          .select('id,id_karyawan,status')
+          .eq('id', idDokumen)
+          .maybeSingle();
+      if (dokumen == null) {
+        return {'status': 'gagal', 'pesan': 'Dokumen tidak ditemukan'};
+      }
+      if (dokumen['status'] != 'menunggu') {
+        return {'status': 'gagal', 'pesan': 'Dokumen sudah diproses sebelumnya'};
+      }
+
+      final payload = <String, dynamic>{
+        'status': status,
+        'id_admin': admin['id'],
+        'tanggal_proses': DateTime.now().toIso8601String(),
+      };
+
+      // Jika diterima, tambahkan tanda tangan admin
+      if (status == 'diterima') {
+        final ttdAdmin = _readText(admin['tanda_tangan']);
+        if (ttdAdmin.isNotEmpty) {
+          payload['tanda_tangan_admin'] = ttdAdmin;
+        }
+
+        // Ambil semua item untuk mengurangi stok
+        final items = _asMapList(
+          await _supabase
+              .from('dokumen_pengajuan_item')
+              .select('id_apd,jumlah')
+              .eq('id_pengajuan', idDokumen),
+        );
+
+        // Langsung kurangi stok tanpa validasi
+        for (final item in items) {
+          final idApd = _readText(item['id_apd']);
+          final jumlah = int.tryParse('${item['jumlah'] ?? 1}') ?? 1;
+          if (idApd.isNotEmpty) {
+            final apd = await _supabase
+                .from('apd')
+                .select('id,stok')
+                .eq('id', idApd)
+                .maybeSingle();
+            if (apd != null) {
+              final stok = int.tryParse('${apd['stok'] ?? 0}') ?? 0;
+              await _supabase
+                  .from('apd')
+                  .update({'stok': stok - jumlah})
+                  .eq('id', idApd);
+            }
+          }
+        }
+      }
+
+      if (catatan != null && catatan.isNotEmpty) {
+        payload['catatan_admin'] = catatan;
+      }
+
+      if (lokasiPengambilan != null && lokasiPengambilan.isNotEmpty) {
+        payload['lokasi_pengambilan'] = lokasiPengambilan;
+      }
+
+      await _supabase
+          .from('dokumen_pengajuan')
+          .update(payload)
+          .eq('id', idDokumen);
+
+      // Kirim notifikasi ke karyawan
+      final idKaryawan = _readText(dokumen['id_karyawan']);
+      if (idKaryawan.isNotEmpty) {
+        final judul = status == 'diterima'
+            ? 'Dokumen Pengajuan APD Diterima'
+            : 'Dokumen Pengajuan APD Ditolak';
+        final pesan = status == 'diterima'
+            ? 'Pengajuan APD Anda telah diterima oleh admin ${admin['nama_lengkap']}. Silakan buka dokumen penerimaan.'
+            : 'Pengajuan APD Anda ditolak oleh admin. ${catatan != null && catatan.isNotEmpty ? 'Catatan: $catatan' : ''}';
+
+        await _kirimNotifikasiKaryawan(
+          idKaryawan: idKaryawan,
+          judul: judul,
+          pesan: pesan,
+          tipeNotifikasi: 'dokumen_pengajuan',
+          payload: {
+            'id_pengajuan': idDokumen,
+            'status': status,
+          },
+        );
+      }
+
+      return {
+        'status': 'sukses',
+        'pesan': status == 'diterima'
+            ? 'Dokumen pengajuan berhasil diterima'
+            : 'Dokumen pengajuan berhasil ditolak',
+      };
+    } catch (e) {
+      return {'status': 'gagal', 'pesan': 'Gagal memproses dokumen: $e'};
+    }
+  }
+
+  /// Menyimpan tanda tangan admin ke database.
+  Future<Map<String, dynamic>> simpanTandaTanganAdmin({
+    required String username,
+    required String tandaTanganBase64,
+  }) async {
+    try {
+      await _supabase
+          .from('admin')
+          .update({'tanda_tangan': tandaTanganBase64})
+          .eq('username', username);
+
+      return {'status': 'sukses', 'pesan': 'Tanda tangan berhasil disimpan'};
+    } catch (e) {
+      return {'status': 'gagal', 'pesan': 'Gagal menyimpan tanda tangan: $e'};
+    }
+  }
+
+  /// Mengambil tanda tangan admin dari database.
+  Future<Map<String, dynamic>> ambilTandaTanganAdmin(String username) async {
+    try {
+      final admin = await _supabase
+          .from('admin')
+          .select('tanda_tangan')
+          .eq('username', username)
+          .maybeSingle();
+
+      return {
+        'status': 'sukses',
+        'data': {
+          'tanda_tangan': admin?['tanda_tangan']?.toString() ?? '',
+        },
+      };
+    } catch (e) {
+      return {'status': 'gagal', 'pesan': 'Gagal memuat tanda tangan: $e'};
+    }
+  }
+
+  /// Mengambil daftar dokumen pengajuan milik karyawan tertentu.
+  Future<Map<String, dynamic>> daftarDokumenKaryawan(String username) async {
+    try {
+      final karyawan = await _supabase
+          .from('karyawan')
+          .select('id')
+          .eq('username', username)
+          .maybeSingle();
+      if (karyawan == null) {
+        return {'status': 'sukses', 'data': []};
+      }
+
+      final rows = _asMapList(
+        await _supabase
+            .from('dokumen_pengajuan')
+            .select('*')
+            .eq('id_karyawan', karyawan['id'])
+            .order('tanggal_pengajuan', ascending: false),
+      );
+
+      final enriched = <Map<String, dynamic>>[];
+      for (final row in rows) {
+        final idDokumen = _readText(row['id']);
+
+        // Ambil jumlah item
+        final itemRows = _asMapList(
+          await _supabase
+              .from('dokumen_pengajuan_item')
+              .select('id')
+              .eq('id_pengajuan', idDokumen),
+        );
+
+        // Ambil nama admin (jika sudah diproses)
+        String namaAdmin = '-';
+        final idAdmin = _readText(row['id_admin']);
+        if (idAdmin.isNotEmpty) {
+          final admin = await _supabase
+              .from('admin')
+              .select('nama_lengkap')
+              .eq('id', idAdmin)
+              .maybeSingle();
+          namaAdmin = _readText(admin?['nama_lengkap'], fallback: '-');
+        }
+
+        enriched.add({
+          ...row.map((key, value) => MapEntry('$key', value)),
+          'jumlah_item': itemRows.length,
+          'nama_admin': namaAdmin,
+        });
+      }
+
+      return {'status': 'sukses', 'data': enriched};
+    } catch (e) {
+      return {'status': 'gagal', 'pesan': 'Gagal memuat dokumen karyawan: $e'};
+    }
+  }
+
+  Future<Map<String, dynamic>> dokumenPenerimaanKaryawan(String username) async {
+    try {
+      final user = username.trim();
+      if (user.isEmpty) return {'status': 'sukses', 'data': []};
+
+      var karyawan = await _supabase
+          .from('karyawan')
+          .select('id')
+          .eq('username', user)
+          .maybeSingle();
+      karyawan ??= await _supabase
+          .from('karyawan')
+          .select('id')
+          .ilike('username', user)
+          .maybeSingle();
+      if (karyawan == null) return {'status': 'sukses', 'data': []};
+
+      final idKaryawan = _readText(karyawan['id']);
+
+      final rows = _asMapList(
+        await _supabase
+            .from('dokumen_pengajuan')
+            .select('*')
+            .eq('id_karyawan', idKaryawan)
+            .not('status', 'eq', 'menunggu')
+            .order('tanggal_pengajuan', ascending: false),
+      );
+
+      final enriched = <Map<String, dynamic>>[];
+      for (final row in rows) {
+        final idDokumen = _readText(row['id']);
+
+        final itemRows = _asMapList(
+          await _supabase
+              .from('dokumen_pengajuan_item')
+              .select('id')
+              .eq('id_pengajuan', idDokumen),
+        );
+
+        enriched.add({
+          ...row.map((key, value) => MapEntry('$key', value)),
+          'item_count': itemRows.length,
+        });
+      }
+
+      return {'status': 'sukses', 'data': enriched};
+    } catch (e) {
+      return {'status': 'gagal', 'pesan': 'Gagal memuat dokumen penerimaan: $e'};
+    }
+  }
+
+  Future<Map<String, dynamic>> detailDokumenPenerimaan(String idDokumen) async {
+    try {
+      final id = idDokumen.trim();
+      if (id.isEmpty) {
+        return {'status': 'gagal', 'pesan': 'ID dokumen tidak valid'};
+      }
+
+      final dokumen = await _supabase
+          .from('dokumen_pengajuan')
+          .select('*')
+          .eq('id', id)
+          .maybeSingle();
+
+      if (dokumen == null) {
+        return {'status': 'gagal', 'pesan': 'Dokumen tidak ditemukan'};
+      }
+
+      final idKaryawan = _readText(dokumen['id_karyawan']);
+      final idAdmin = _readText(dokumen['id_admin']);
+
+      final karyawan = await _supabase
+          .from('karyawan')
+          .select('id,username,nama_lengkap,jabatan,departemen,lokasi_kerja')
+          .eq('id', idKaryawan)
+          .maybeSingle();
+
+      Map<String, dynamic>? admin;
+      if (idAdmin.isNotEmpty) {
+        admin = await _supabase
+            .from('admin')
+            .select('id,nama_lengkap')
+            .eq('id', idAdmin)
+            .maybeSingle();
+      }
+
+      final itemRows = _asMapList(
+        await _supabase
+            .from('dokumen_pengajuan_item')
+            .select('id_apd,ukuran,alasan,jumlah')
+            .eq('id_pengajuan', id),
+      );
+
+      final apdIds = itemRows
+          .map((row) => _readText(row['id_apd']))
+          .where((id) => id.isNotEmpty)
+          .toSet();
+
+      final apdMap = await _loadMapByIds(
+        table: 'apd',
+        ids: apdIds,
+        selectColumns: 'id,nama_apd,satuan',
+      );
+
+      final items = itemRows.map((row) {
+        final apd = apdMap[_readText(row['id_apd'])];
+        return <String, dynamic>{
+          'id_apd': _readText(row['id_apd']),
+          'nama_apd': _readText(apd?['nama_apd'], fallback: '-'),
+          'satuan': _readText(apd?['satuan'], fallback: 'pcs'),
+          'ukuran': _readText(row['ukuran']),
+          'alasan': _readText(row['alasan']),
+          'jumlah': row['jumlah'] ?? 1,
+        };
+      }).toList();
+
+      return {
+        'status': 'sukses',
+        'data': {
+          ...dokumen.map((key, value) => MapEntry('$key', value)),
+          'karyawan': karyawan ?? {},
+          'admin': admin ?? {},
+          'items': items,
+        },
+      };
+    } catch (e) {
+      return {'status': 'gagal', 'pesan': 'Gagal memuat detail dokumen: $e'};
+    }
+  }
 }
+
+

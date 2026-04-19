@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:apdcpp/services/apd_api_service.dart';
 import 'package:apdcpp/tema_aplikasi.dart';
@@ -20,7 +19,6 @@ class _LayarNotifikasiKaryawanState extends State<LayarNotifikasiKaryawan> {
   final DateFormat _dateFormat = DateFormat('dd MMM yyyy, HH:mm');
 
   bool _loading = true;
-  bool _preferensiSiap = false;
   List<Map<String, dynamic>> _items = [];
 
   @override
@@ -29,12 +27,7 @@ class _LayarNotifikasiKaryawanState extends State<LayarNotifikasiKaryawan> {
     _loadData();
   }
 
-  Future<void> _pastikanPreferensiSiap() async {
-    _preferensiSiap = true;
-  }
-
   Future<void> _loadData() async {
-    await _pastikanPreferensiSiap();
     setState(() => _loading = true);
 
     final response = await _api.notifikasiKaryawan(widget.username);

@@ -8,13 +8,15 @@ import 'package:apdcpp/konfigurasi_api.dart';
 import 'package:apdcpp/karyawan/dashboard_karyawan_aturan_helper.dart';
 import 'package:apdcpp/karyawan/layar_detail_berita_karyawan.dart';
 import 'package:apdcpp/karyawan/layar_kalender_karyawan.dart';
+import 'package:apdcpp/karyawan/layar_pengajuan_dokumen_apd.dart';
 import 'package:apdcpp/karyawan/layar_katalog_apd_karyawan.dart';
 import 'package:apdcpp/karyawan/layar_notifikasi_karyawan.dart';
 import 'package:apdcpp/karyawan/layar_profil_karyawan.dart';
 import 'package:apdcpp/karyawan/layar_lapor_kendala_karyawan.dart';
+import 'package:apdcpp/karyawan/layar_riwayat_pengajuan_karyawan.dart';
+import 'package:apdcpp/karyawan/layar_daftar_dokumen_penerimaan_karyawan.dart';
 import 'package:apdcpp/services/apd_api_service.dart';
 import 'package:apdcpp/services/sesi_aplikasi_service.dart';
-import 'package:apdcpp/karyawan/layar_riwayat_pengajuan_karyawan.dart';
 import 'package:apdcpp/awal/layar_pilih_peran.dart';
 import 'package:apdcpp/services/tutorial_aplikasi_service.dart';
 import 'package:apdcpp/tema_aplikasi.dart';
@@ -339,7 +341,7 @@ class _LayarDashboardKaryawanState extends State<LayarDashboardKaryawan> {
 
   Color _statusColor(String status) {
     final text = status.toLowerCase();
-    if (text == 'disetujui') return Colors.green;
+    if (text == 'disetujui' || text == 'diterima') return Colors.green;
     if (text == 'ditolak') return Colors.red;
     if (text == 'selesai') return Colors.black87;
     return Colors.blue;
@@ -347,7 +349,7 @@ class _LayarDashboardKaryawanState extends State<LayarDashboardKaryawan> {
 
   String _statusLabel(String status) {
     final text = status.toLowerCase();
-    if (text == 'disetujui') return 'Disetujui';
+    if (text == 'disetujui' || text == 'diterima') return 'Disetujui';
     if (text == 'ditolak') return 'Ditolak';
     if (text == 'selesai') return 'Selesai / Sudah Diambil';
     return 'Menunggu Konfirmasi';
@@ -1082,6 +1084,19 @@ class _LayarDashboardKaryawanState extends State<LayarDashboardKaryawan> {
           }
 
           if (index == 2) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => LayarKalenderKaryawan(username: _username),
+              ),
+            ).then((_) {
+              if (!mounted) return;
+              setState(() => _selectedIndex = 0);
+            });
+            return;
+          }
+
+          if (index == 3) {
             _bukaProfil();
           }
         },
@@ -1090,6 +1105,10 @@ class _LayarDashboardKaryawanState extends State<LayarDashboardKaryawan> {
           BottomNavigationBarItem(
             icon: Icon(Icons.report_problem_outlined),
             label: 'Lapor',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.calendar_month),
+            label: 'Kalender',
           ),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profil'),
         ],
@@ -1109,9 +1128,8 @@ class _LayarDashboardKaryawanState extends State<LayarDashboardKaryawan> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => LayarKatalogApdKaryawan(
+                  builder: (_) => LayarPengajuanDokumenApd(
                     username: _username,
-                    modePengajuan: true,
                   ),
                 ),
               ).then((_) => _loadDashboard());
@@ -1149,13 +1167,14 @@ class _LayarDashboardKaryawanState extends State<LayarDashboardKaryawan> {
         ),
         Expanded(
           child: _quickActionButton(
-            icon: Icons.calendar_month,
-            label: 'Kalender',
+            icon: Icons.description_outlined,
+            label: 'Dokumen\nPenerimaan',
             onTap: () {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => LayarKalenderKaryawan(username: _username),
+                  builder: (_) =>
+                      LayarDaftarDokumenPenerimaanKaryawan(username: _username),
                 ),
               );
             },

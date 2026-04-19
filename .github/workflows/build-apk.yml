@@ -1,57 +1,50 @@
-name: Build Flutter APK
+name: Build APK Android
 
 on:
   push:
-    branches: [ main, master, develop ]
+    branches: [ master, main ]
   pull_request:
-    branches: [ main, master, develop ]
+    branches: [ master, main ]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30  # Batasi maksimal 30 menit
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+    - name: Checkout kode
+      uses: actions/checkout@v4
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'zulu'
-          java-version: '17'
+    - name: Setup Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.24.5'
+        channel: 'stable'
+        cache: true
 
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: 'stable'
-          cache: false  # Disable cache untuk menghindari corrupt cache
+    - name: Download dependencies
+      run: flutter pub get
 
-      - name: Flutter version
-        run: flutter --version
+    - name: Verifikasi kode
+      run: flutter analyze
 
-      - name: Get dependencies
-        run: flutter pub get
+    - name: Build APK Release
+      run: flutter build apk --release
 
-      - name: Analyze code
-        run: flutter analyze || true
-        continue-on-error: true
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: apdcpp-release-apk
+        path: build/app/outputs/flutter-apk/app-release.apk
+        retention-days: 30
 
-      - name: Build APK (Release)
-        run: flutter build apk --release
-        env:
-          # Optimize gradle build
-          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.parallel=true -Dorg.gradle.jvmargs=-Xmx2048m"
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-release
-          path: build/app/outputs/flutter-apk/app-release.apk
-          retention-days: 30
-
-      - name: Get APK info
-        run: |
-          ls -lh build/app/outputs/flutter-apk/
-          md5sum build/app/outputs/flutter-apk/app-release.apk
+    - name: Release Summary
+      run: |
+        echo "## ✅ Build Berhasil!" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📱 APK Release" >> $GITHUB_STEP_SUMMARY
+        echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Tanggal**: $(date +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "Download APK dari tab **Artifacts** di bawah." >> $GITHUB_STEP_SUMMARY
