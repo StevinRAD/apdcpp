@@ -22,6 +22,9 @@ jobs:
         channel: 'stable'
         cache: true
 
+    - name: Upgrade Flutter ke versi terbaru
+      run: flutter upgrade
+
     - name: Download dependencies
       run: flutter pub get
 
