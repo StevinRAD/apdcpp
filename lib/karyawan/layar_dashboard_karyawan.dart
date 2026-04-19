@@ -67,7 +67,6 @@ class _LayarDashboardKaryawanState extends State<LayarDashboardKaryawan> {
 
   Timer? _sesiTimer;
   RealtimeChannel? _realtimeChannel;
-  int _notifikasiTerakhirCount = 0;
 
   @override
   void initState() {
@@ -303,7 +302,6 @@ class _LayarDashboardKaryawanState extends State<LayarDashboardKaryawan> {
         _fotoProfil = profil?['foto_profil']?.toString();
 
         _notifBelumDibaca = notifCount;
-        _notifikasiTerakhirCount = notifCount;
 
         final rawPengajuanTerakhir = data['pengajuan_terakhir'];
         _pengajuanTerakhir = rawPengajuanTerakhir is Map
