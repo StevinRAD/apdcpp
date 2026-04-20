@@ -28,11 +28,18 @@ jobs:
     - name: Download dependencies
       run: flutter pub get
 
+    - name: Setup Gradle properties
+      run: |
+        echo "org.gradle.daemon=false" >> android/gradle.properties
+        echo "org.gradle.parallel=false" >> android/gradle.properties
+
     - name: Verifikasi kode (hanya error, tidak info/warning)
       run: flutter analyze --no-fatal-infos || true
 
     - name: Build APK Release
-      run: flutter build apk --release
+      run: flutter build apk --release --no-tree-shake-icons
+      env:
+        FLUTTER_AUTO_WATCH: false
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
