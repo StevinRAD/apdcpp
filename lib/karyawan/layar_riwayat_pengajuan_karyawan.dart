@@ -91,6 +91,31 @@ class _LayarRiwayatPengajuanKaryawanState
     }
   }
 
+  /// Parse alasan JSON dan return format readable
+  String _formatAlasan(String? alasanRaw) {
+    if (alasanRaw == null || alasanRaw.isEmpty) return '-';
+
+    // Jika format JSON baru
+    if (alasanRaw.contains('{') && alasanRaw.contains('}')) {
+      try {
+        final jenisRegex = RegExp(r'"jenis_alasan"\s*:\s*"([^"]+)"');
+        final penjelasanRegex = RegExp(r'"penjelasan"\s*:\s*"([^"]*)"');
+        final jenisMatch = jenisRegex.firstMatch(alasanRaw);
+        final penjelasanMatch = penjelasanRegex.firstMatch(alasanRaw);
+
+        final jenis = jenisMatch?.group(1) ?? alasanRaw;
+        final penjelasan = penjelasanMatch?.group(1) ?? '';
+
+        if (penjelasan.isNotEmpty) return '$jenis - $penjelasan';
+        return jenis;
+      } catch (_) {
+        // Fallback ke raw string jika error parsing
+      }
+    }
+
+    return alasanRaw;
+  }
+
   IconData _statusIcon(String status) {
     switch (status.toLowerCase()) {
       case 'disetujui':
@@ -132,7 +157,10 @@ class _LayarRiwayatPengajuanKaryawanState
 
   bool _statusDisetujui(String status) {
     final s = status.toLowerCase();
-    return s == 'disetujui' || s == 'diterima' || s == 'diproses' || s == 'selesai';
+    return s == 'disetujui' ||
+        s == 'diterima' ||
+        s == 'diproses' ||
+        s == 'selesai';
   }
 
   String _tanggalDiproses(Map<String, dynamic> item) {
@@ -185,6 +213,7 @@ class _LayarRiwayatPengajuanKaryawanState
   }
 
   Widget _buildCard(Map<String, dynamic> item) {
+    final tipe = item['tipe']?.toString() ?? 'single';
     final statusRaw = item['status_pengajuan']?.toString() ?? '-';
     final status = _statusLabel(statusRaw);
     final statusColor = _statusColor(statusRaw);
@@ -196,6 +225,10 @@ class _LayarRiwayatPengajuanKaryawanState
     final menunggu = statusRaw.toLowerCase() == 'menunggu';
     final tanggalDiproses = _tanggalDiproses(item);
 
+    // Untuk tipe dokumen, tampilkan detail items
+    final itemsData = item['items_data'] as List?;
+    final statusDetail = item['status_detail']?.toString() ?? '';
+
     return Card(
       elevation: disetujui ? 2 : (menunggu ? 1 : 0),
       shape: RoundedRectangleBorder(
@@ -203,8 +236,11 @@ class _LayarRiwayatPengajuanKaryawanState
         side: disetujui
             ? const BorderSide(color: Colors.green, width: 1.5)
             : (menunggu
-                ? BorderSide(color: Colors.orange.withValues(alpha: 0.5), width: 1)
-                : BorderSide.none),
+                  ? BorderSide(
+                      color: Colors.orange.withValues(alpha: 0.5),
+                      width: 1,
+                    )
+                  : BorderSide.none),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(18),
@@ -241,14 +277,23 @@ class _LayarRiwayatPengajuanKaryawanState
                           ),
                         ),
                         const SizedBox(height: 2),
-                        Text(
-                          '${item['jumlah_pengajuan'] ?? '-'} ${item['satuan'] ?? ''}'
-                          '${(item['ukuran']?.toString() ?? '').isNotEmpty ? '· Ukuran: ${item['ukuran']}' : ''}',
-                          style: const TextStyle(
-                            color: TemaAplikasi.netral,
-                            fontSize: 12,
+                        if (tipe == 'dokumen' && statusDetail.isNotEmpty)
+                          Text(
+                            statusDetail,
+                            style: const TextStyle(
+                              color: TemaAplikasi.netral,
+                              fontSize: 11,
+                            ),
+                          )
+                        else
+                          Text(
+                            '${item['jumlah_pengajuan'] ?? '-'} ${item['satuan'] ?? ''}'
+                            '${(item['ukuran']?.toString() ?? '').isNotEmpty ? '· Ukuran: ${item['ukuran']}' : ''}',
+                            style: const TextStyle(
+                              color: TemaAplikasi.netral,
+                              fontSize: 12,
+                            ),
                           ),
-                        ),
                       ],
                     ),
                   ),
@@ -261,7 +306,9 @@ class _LayarRiwayatPengajuanKaryawanState
                       color: statusColor.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(999),
                       border: menunggu
-                          ? Border.all(color: statusColor.withValues(alpha: 0.3))
+                          ? Border.all(
+                              color: statusColor.withValues(alpha: 0.3),
+                            )
                           : null,
                     ),
                     child: Row(
@@ -273,7 +320,9 @@ class _LayarRiwayatPengajuanKaryawanState
                             height: 12,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(statusColor),
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                statusColor,
+                              ),
                             ),
                           ),
                         if (menunggu) const SizedBox(width: 4),
@@ -290,6 +339,83 @@ class _LayarRiwayatPengajuanKaryawanState
                   ),
                 ],
               ),
+
+              // Detail items untuk tipe dokumen
+              if (tipe == 'dokumen' &&
+                  itemsData != null &&
+                  itemsData.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: TemaAplikasi.latar,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Detail Item:',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      ...itemsData.map<Widget>((itemData) {
+                        final itemStatus =
+                            itemData['status']?.toString().toLowerCase() ??
+                            'menunggu';
+                        final itemStatusColor = itemStatus == 'diterima'
+                            ? Colors.green
+                            : (itemStatus == 'ditolak'
+                                  ? Colors.red
+                                  : Colors.orange);
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Row(
+                            children: [
+                              Icon(
+                                itemStatus == 'diterima'
+                                    ? Icons.check_circle
+                                    : (itemStatus == 'ditolak'
+                                          ? Icons.cancel
+                                          : Icons.hourglass_empty),
+                                size: 14,
+                                color: itemStatusColor,
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  '${itemData['nama_apd']} (${itemData['jumlah']}x - ${itemData['ukuran']})',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                itemStatus == 'diterima'
+                                    ? 'Diterima'
+                                    : (itemStatus == 'ditolak'
+                                          ? 'Ditolak'
+                                          : 'Menunggu'),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: itemStatusColor,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                    ],
+                  ),
+                ),
+              ],
 
               // Info Menunggu - tampil menonjol jika status menunggu
               if (menunggu) ...[
@@ -385,16 +511,22 @@ class _LayarRiwayatPengajuanKaryawanState
                   width: double.infinity,
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: (ditolak
-                            ? TemaAplikasi.bahaya
-                            : (menunggu ? Colors.orange : TemaAplikasi.emas))
-                        .withValues(alpha: 0.08),
+                    color:
+                        (ditolak
+                                ? TemaAplikasi.bahaya
+                                : (menunggu
+                                      ? Colors.orange
+                                      : TemaAplikasi.emas))
+                            .withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                      color: (ditolak
-                              ? TemaAplikasi.bahaya
-                              : (menunggu ? Colors.orange : TemaAplikasi.emas))
-                          .withValues(alpha: 0.25),
+                      color:
+                          (ditolak
+                                  ? TemaAplikasi.bahaya
+                                  : (menunggu
+                                        ? Colors.orange
+                                        : TemaAplikasi.emas))
+                              .withValues(alpha: 0.25),
                     ),
                   ),
                   child: Row(
@@ -403,7 +535,9 @@ class _LayarRiwayatPengajuanKaryawanState
                       Icon(
                         ditolak
                             ? Icons.info_outline
-                            : (menunggu ? Icons.access_time : Icons.sticky_note_2_outlined),
+                            : (menunggu
+                                  ? Icons.access_time
+                                  : Icons.sticky_note_2_outlined),
                         size: 15,
                         color: ditolak
                             ? TemaAplikasi.bahaya
@@ -414,11 +548,15 @@ class _LayarRiwayatPengajuanKaryawanState
                         child: Text(
                           ditolak
                               ? 'Alasan: $catatan'
-                              : (menunggu ? 'Catatan: $catatan' : 'Catatan: $catatan'),
+                              : (menunggu
+                                    ? 'Catatan: $catatan'
+                                    : 'Catatan: $catatan'),
                           style: TextStyle(
                             color: ditolak
                                 ? TemaAplikasi.bahaya
-                                : (menunggu ? Colors.orange.shade900 : TemaAplikasi.teksUtama),
+                                : (menunggu
+                                      ? Colors.orange.shade900
+                                      : TemaAplikasi.teksUtama),
                             fontSize: 12,
                             height: 1.4,
                           ),
@@ -534,7 +672,9 @@ class _LayarRiwayatPengajuanKaryawanState
                         height: 14,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(statusColor),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            statusColor,
+                          ),
                         ),
                       ),
                     if (menunggu) const SizedBox(width: 6),
@@ -694,7 +834,10 @@ class _LayarRiwayatPengajuanKaryawanState
                   '${item['jumlah_pengajuan'] ?? '-'} ${item['satuan'] ?? ''}',
                 ),
                 _row('Ukuran', item['ukuran']?.toString() ?? '-'),
-                _row('Alasan', item['alasan_pengajuan']?.toString() ?? '-'),
+                _row(
+                  'Alasan',
+                  _formatAlasan(item['alasan_pengajuan']?.toString()),
+                ),
                 _row(
                   'Tgl Pengajuan',
                   _tanggal(item['tanggal_pengajuan']?.toString()),
@@ -710,16 +853,22 @@ class _LayarRiwayatPengajuanKaryawanState
                   width: double.infinity,
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: (ditolak
-                            ? TemaAplikasi.bahaya
-                            : (menunggu ? Colors.orange : TemaAplikasi.emas))
-                        .withValues(alpha: 0.08),
+                    color:
+                        (ditolak
+                                ? TemaAplikasi.bahaya
+                                : (menunggu
+                                      ? Colors.orange
+                                      : TemaAplikasi.emas))
+                            .withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
-                      color: (ditolak
-                              ? TemaAplikasi.bahaya
-                              : (menunggu ? Colors.orange : TemaAplikasi.emas))
-                          .withValues(alpha: 0.25),
+                      color:
+                          (ditolak
+                                  ? TemaAplikasi.bahaya
+                                  : (menunggu
+                                        ? Colors.orange
+                                        : TemaAplikasi.emas))
+                              .withValues(alpha: 0.25),
                     ),
                   ),
                   child: Column(
@@ -733,7 +882,9 @@ class _LayarRiwayatPengajuanKaryawanState
                           fontWeight: FontWeight.w700,
                           color: ditolak
                               ? TemaAplikasi.bahaya
-                              : (menunggu ? Colors.orange : TemaAplikasi.emasTua),
+                              : (menunggu
+                                    ? Colors.orange
+                                    : TemaAplikasi.emasTua),
                         ),
                       ),
                       const SizedBox(height: 6),

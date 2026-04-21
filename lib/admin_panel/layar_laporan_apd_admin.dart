@@ -661,7 +661,7 @@ class _LayarLaporanApdAdminState extends State<LayarLaporanApdAdmin>
                   ),
                   _chip(
                     'Alasan',
-                    row['alasan_pengajuan']?.toString() ?? '-',
+                    _formatAlasan(row['alasan_pengajuan']?.toString()),
                     TemaAplikasi.netral,
                   ),
                   if (fotoUrl.isNotEmpty) _chip('Foto', 'Ada', Colors.teal),
@@ -758,7 +758,7 @@ class _LayarLaporanApdAdminState extends State<LayarLaporanApdAdmin>
                 _detailRowAdmin('Jumlah', '${row['jumlah_pengajuan'] ?? '-'}'),
                 _detailRowAdmin(
                   'Alasan',
-                  row['alasan_pengajuan']?.toString() ?? '-',
+                  _formatAlasan(row['alasan_pengajuan']?.toString()),
                 ),
                 _detailRowAdmin(
                   'Status',
@@ -1242,5 +1242,34 @@ class _LayarLaporanApdAdminState extends State<LayarLaporanApdAdmin>
         ],
       ),
     );
+  }
+
+  // Parse dan format alasan dari JSON string
+  String _formatAlasan(String? alasanRaw) {
+    if (alasanRaw == null || alasanRaw.isEmpty) return '-';
+
+    // Cek apakah format JSON
+    if (alasanRaw.contains('{') && alasanRaw.contains('}')) {
+      try {
+        // Sederhana: parse dengan regex untuk menghindari import dart:convert
+        final jenisRegex = RegExp(r'"jenis_alasan"\s*:\s*"([^"]+)"');
+        final penjelasanRegex = RegExp(r'"penjelasan"\s*:\s*"([^"]*)"');
+
+        final jenisMatch = jenisRegex.firstMatch(alasanRaw);
+        final penjelasanMatch = penjelasanRegex.firstMatch(alasanRaw);
+
+        final jenis = jenisMatch?.group(1) ?? alasanRaw;
+        final penjelasan = penjelasanMatch?.group(1) ?? '';
+
+        if (penjelasan.isNotEmpty) {
+          return '$jenis - $penjelasan';
+        }
+        return jenis;
+      } catch (_) {
+        // Jika gagal parse, kembalikan ke raw string
+      }
+    }
+
+    return alasanRaw;
   }
 }

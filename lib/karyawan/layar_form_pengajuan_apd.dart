@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -25,8 +26,9 @@ class LayarFormPengajuanApd extends StatefulWidget {
 class _LayarFormPengajuanApdState extends State<LayarFormPengajuanApd> {
   final ApiApdService _api = const ApiApdService();
   final ImagePicker _picker = ImagePicker();
+  final TextEditingController _penjelasanAlasanController = TextEditingController();
 
-  String _alasan = 'Karyawan Baru';
+  String _jenisAlasan = 'Karyawan Baru';
   String _ukuran = '';
   bool _sedangSimpan = false;
   bool _memuatAturan = true;
@@ -46,6 +48,12 @@ class _LayarFormPengajuanApdState extends State<LayarFormPengajuanApd> {
     super.initState();
     _ukuran = _opsiUkuran.first;
     _loadAturanPengajuan();
+  }
+
+  @override
+  void dispose() {
+    _penjelasanAlasanController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadAturanPengajuan() async {
@@ -136,22 +144,53 @@ class _LayarFormPengajuanApdState extends State<LayarFormPengajuanApd> {
       return;
     }
 
-    if (_alasan == 'Rusak' && _buktiFoto == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Upload foto wajib jika alasan Rusak')),
-      );
-      return;
+    // Validasi berdasarkan jenis alasan
+    if (_jenisAlasan == 'APD Lama Rusak') {
+      if (_buktiFoto == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Upload foto bukti kerusakan wajib diisi'),
+            backgroundColor: TemaAplikasi.bahaya,
+          ),
+        );
+        return;
+      }
+      if (_penjelasanAlasanController.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Penjelasan alasan kerusakan wajib diisi'),
+            backgroundColor: TemaAplikasi.bahaya,
+          ),
+        );
+        return;
+      }
+    } else if (_jenisAlasan == 'Hilang') {
+      if (_penjelasanAlasanController.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Penjelasan alasan kehilangan wajib diisi'),
+            backgroundColor: TemaAplikasi.bahaya,
+          ),
+        );
+        return;
+      }
     }
 
     setState(() {
       _sedangSimpan = true;
     });
 
+    // Format alasan sebagai JSON yang valid
+    final alasanData = <String, dynamic>{
+      'jenis_alasan': _jenisAlasan,
+      'penjelasan': _penjelasanAlasanController.text.trim(),
+    };
+
     final response = await _api.simpanPengajuan(
       username: widget.username,
       idApd: '${widget.apd['id_apd'] ?? widget.apd['id'] ?? ''}',
       ukuran: _ukuran,
-      alasan: _alasan,
+      alasan: jsonEncode(alasanData), // Gunakan jsonEncode agar format JSON valid
       buktiFoto: _buktiFoto,
     );
 
@@ -416,33 +455,48 @@ class _LayarFormPengajuanApdState extends State<LayarFormPengajuanApd> {
                     ),
                     const SizedBox(height: 14),
                     DropdownButtonFormField<String>(
-                      initialValue: _alasan,
+                      value: _jenisAlasan,
                       decoration: const InputDecoration(
                         labelText: 'Alasan Pengajuan',
                       ),
                       items: const [
                         DropdownMenuItem(
                           value: 'Karyawan Baru',
-                          child: Text('Baru / Karyawan Baru'),
+                          child: Text('Karyawan Baru'),
                         ),
-                        DropdownMenuItem(value: 'Rusak', child: Text('Rusak')),
+                        DropdownMenuItem(
+                          value: 'APD Lama Rusak',
+                          child: Text('APD Lama Rusak'),
+                        ),
                         DropdownMenuItem(
                           value: 'Hilang',
                           child: Text('Hilang'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'Lainnya',
-                          child: Text('Lainnya'),
                         ),
                       ],
                       onChanged: (value) {
                         if (value == null) return;
                         setState(() {
-                          _alasan = value;
+                          _jenisAlasan = value;
                         });
                       },
                     ),
-                    if (_alasan == 'Rusak') ...[
+                    if (_jenisAlasan != 'Karyawan Baru') ...[
+                      const SizedBox(height: 14),
+                      TextField(
+                        controller: _penjelasanAlasanController,
+                        maxLines: 2,
+                        decoration: InputDecoration(
+                          labelText: _jenisAlasan == 'APD Lama Rusak'
+                              ? 'Penjelasan Kerusakan'
+                              : 'Penjelasan',
+                          hintText: _jenisAlasan == 'APD Lama Rusak'
+                              ? 'Jelaskan bagaimana APD lama rusak...'
+                              : 'Jelaskan bagaimana APD bisa hilang...',
+                          border: const OutlineInputBorder(),
+                        ),
+                      ),
+                    ],
+                    if (_jenisAlasan == 'APD Lama Rusak') ...[
                       const SizedBox(height: 16),
                       const Text(
                         'Bukti Foto Kerusakan',

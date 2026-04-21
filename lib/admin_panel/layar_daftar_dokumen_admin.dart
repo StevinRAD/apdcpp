@@ -4,7 +4,6 @@ import 'package:intl/intl.dart';
 import 'package:apdcpp/services/apd_api_service.dart';
 import 'package:apdcpp/tema_aplikasi.dart';
 import 'package:apdcpp/karyawan/layar_preview_dokumen_pengajuan.dart';
-import 'package:apdcpp/karyawan/layar_preview_dokumen_penerimaan.dart';
 
 /// Layar daftar dokumen pengajuan APD untuk admin.
 /// HANYA untuk melihat dokumen (view-only). TIDAK ada tombol terima/tolak.
@@ -59,48 +58,61 @@ class _LayarDaftarDokumenAdminState extends State<LayarDaftarDokumenAdmin> {
     return DateFormat('dd MMM yyyy, HH:mm').format(dt);
   }
 
+  /// Menghitung status tampilan berdasarkan data dokumen.
+  /// Jika status backend masih 'menunggu' tapi sudah ada item diproses,
+  /// tampilkan 'selesai' atau 'diproses'.
+  String _computeDisplayStatus(Map<String, dynamic> dok) {
+    final rawStatus = dok['status']?.toString().toLowerCase() ?? 'menunggu';
+    if (rawStatus != 'menunggu') return rawStatus;
+
+    // Cek dari jumlah item yang sudah diproses (jika API menyediakan)
+    final jumlahItem = int.tryParse('${dok['jumlah_item'] ?? 0}') ?? 0;
+    final jumlahDiterima = int.tryParse('${dok['jumlah_diterima'] ?? 0}') ?? 0;
+    final jumlahDitolak = int.tryParse('${dok['jumlah_ditolak'] ?? 0}') ?? 0;
+    final totalDiproses = jumlahDiterima + jumlahDitolak;
+
+    if (totalDiproses > 0 && totalDiproses >= jumlahItem && jumlahItem > 0) {
+      return 'selesai';
+    }
+    if (totalDiproses > 0) {
+      return 'diproses'; 
+    }
+    return rawStatus;
+  }
+
   Color _statusColor(String s) {
     if (s == 'diterima') return TemaAplikasi.sukses;
     if (s == 'ditolak') return TemaAplikasi.bahaya;
+    if (s == 'selesai' || s == 'diproses') return TemaAplikasi.biruTua;
     return Colors.orange;
   }
 
   String _statusLabel(String s) {
     if (s == 'diterima') return 'Diterima';
     if (s == 'ditolak') return 'Ditolak';
+    if (s == 'selesai') return 'Selesai';
+    if (s == 'diproses') return 'Diproses';
     return 'Menunggu';
   }
 
   IconData _statusIcon(String s) {
     if (s == 'diterima') return Icons.check_circle;
     if (s == 'ditolak') return Icons.cancel;
+    if (s == 'selesai' || s == 'diproses') return Icons.task_alt;
     return Icons.hourglass_empty;
   }
 
   void _lihatDokumen(Map<String, dynamic> dok) {
-    final status = dok['status']?.toString() ?? 'menunggu';
-
-    if (status == 'diterima') {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => LayarPreviewDokumenPenerimaan(
-            dokumen: dok,
-            username: widget.username,
-          ),
+    // Selalu tampilkan preview pengajuan yang menunjukkan status per item
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => LayarPreviewDokumenPengajuan(
+          idDokumen: dok['id']?.toString() ?? '',
+          username: widget.username,
         ),
-      );
-    } else {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => LayarPreviewDokumenPengajuan(
-            idDokumen: dok['id']?.toString() ?? '',
-            username: widget.username,
-          ),
-        ),
-      );
-    }
+      ),
+    );
   }
 
   @override
@@ -154,6 +166,16 @@ class _LayarDaftarDokumenAdminState extends State<LayarDaftarDokumenAdmin> {
                     _loadDokumen();
                   },
                 ),
+                const SizedBox(width: 8),
+                _FilterChip(
+                  label: 'Selesai',
+                  aktif: _filterStatus == 'selesai',
+                  warna: TemaAplikasi.biruTua,
+                  onTap: () {
+                    _filterStatus = 'selesai';
+                    _loadDokumen();
+                  },
+                ),
               ],
             ),
           ),
@@ -195,7 +217,7 @@ class _LayarDaftarDokumenAdminState extends State<LayarDaftarDokumenAdmin> {
   }
 
   Widget _buildDokumenCard(Map<String, dynamic> dok) {
-    final status = dok['status']?.toString() ?? 'menunggu';
+    final status = _computeDisplayStatus(dok);
     final warna = _statusColor(status);
 
     return Card(

@@ -350,7 +350,7 @@ class _LayarLaporKendalaKaryawanState extends State<LayarLaporKendalaKaryawan>
             _loadingPengajuan
                 ? const LinearProgressIndicator()
                 : DropdownButtonFormField<String>(
-                    initialValue: _selectedIdPengajuan,
+                    value: _selectedIdPengajuan,
                     isExpanded: true,
                     decoration: const InputDecoration(
                       labelText: 'Pilih Pengajuan APD',
@@ -360,7 +360,7 @@ class _LayarLaporKendalaKaryawanState extends State<LayarLaporKendalaKaryawan>
                     items: _daftarPengajuan.map((p) {
                       final id = p['id_pengajuan']?.toString() ?? '';
                       final nama = p['nama_apd']?.toString() ?? '-';
-                      final status = p['status_pengajuan']?.toString() ?? '';
+                      final status = p['status']?.toString() ?? p['status_pengajuan']?.toString() ?? '';
                       return DropdownMenuItem<String>(
                         value: id,
                         child: Text(

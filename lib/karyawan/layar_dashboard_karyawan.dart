@@ -161,7 +161,7 @@ class _LayarDashboardKaryawanState extends State<LayarDashboardKaryawan> {
       table: 'kalender_perusahaan',
       callback: (payload) async {
         if (!mounted) return;
-        
+
         // Jika ada penambahan baru, munculkan notifikasi
         if (payload.eventType == PostgresChangeEvent.insert) {
           final judul = payload.newRecord['judul']?.toString() ?? 'Agenda Baru';
@@ -172,8 +172,25 @@ class _LayarDashboardKaryawanState extends State<LayarDashboardKaryawan> {
             payload: 'kalender_baru',
           );
         }
-        
+
         // Selalu refresh dashboard agar info kalender terbaru muncul
+        _loadDashboard();
+      },
+    );
+
+    // Listener 3: Update Dokumen Pengajuan (untuk real-time status pengajuan)
+    _realtimeChannel?.onPostgresChanges(
+      event: PostgresChangeEvent.update,
+      schema: 'public',
+      table: 'dokumen_pengajuan',
+      filter: PostgresChangeFilter(
+        type: PostgresChangeFilterType.eq,
+        column: 'id_karyawan',
+        value: idKaryawan,
+      ),
+      callback: (payload) async {
+        if (!mounted) return;
+        // Refresh dashboard agar status pengajuan terbaru muncul
         _loadDashboard();
       },
     );
@@ -232,7 +249,7 @@ class _LayarDashboardKaryawanState extends State<LayarDashboardKaryawan> {
       icon: Icons.note_add_outlined,
       judul: 'Aksi Cepat',
       deskripsi:
-          'Empat tombol ini dipakai untuk membuat pengajuan, membuka riwayat, melihat katalog APD, dan mengecek kalender kerja.',
+          'Empat tombol ini dipakai untuk membuat pengajuan, melihat riwayat, membuka katalog APD, dan melihat dokumen penerimaan.',
       warna: Colors.indigo,
       targetKey: _tutorialQuickActionKey,
     ),
@@ -248,7 +265,7 @@ class _LayarDashboardKaryawanState extends State<LayarDashboardKaryawan> {
       icon: Icons.navigation_outlined,
       judul: 'Navigasi Bawah',
       deskripsi:
-          'Gunakan navigasi bawah untuk kembali ke beranda, membuka form Lapor Kendala/Kerusakan APD, dan masuk ke profil untuk pengaturan akun.',
+          'Gunakan navigasi bawah untuk kembali ke beranda, melaporkan kendala APD, membuka kalender kerja, dan mengatur profil akun.',
       warna: Colors.deepOrange,
       targetKey: _tutorialBottomNavKey,
     ),
@@ -342,14 +359,22 @@ class _LayarDashboardKaryawanState extends State<LayarDashboardKaryawan> {
     if (text == 'disetujui' || text == 'diterima') return Colors.green;
     if (text == 'ditolak') return Colors.red;
     if (text == 'selesai') return Colors.black87;
+    if (text == 'sedang_diproses' || text == 'sedang diproses')
+      return Colors.orange;
+    if (text == 'sebagian_diterima' || text == 'sebagian diterima')
+      return Colors.deepOrange;
     return Colors.blue;
   }
 
   String _statusLabel(String status) {
     final text = status.toLowerCase();
-    if (text == 'disetujui' || text == 'diterima') return 'Disetujui';
-    if (text == 'ditolak') return 'Ditolak';
-    if (text == 'selesai') return 'Selesai / Sudah Diambil';
+    if (text == 'disetujui' || text == 'Pengajuan Diterima') return 'Disetujui';
+    if (text == 'ditolak') return 'Pengajuan Ditolak';
+    if (text == 'selesai') return 'Sebagian Pengajuan Ditolak/Diterima';
+    if (text == 'sedang_diproses' || text == 'Pengajuan sedang diproses')
+      return 'Sedang Diproses';
+    if (text == 'sebagian_diterima' || text == 'sebagian diterima')
+      return 'Sebagian Diterima';
     return 'Menunggu Konfirmasi';
   }
 
@@ -465,8 +490,6 @@ class _LayarDashboardKaryawanState extends State<LayarDashboardKaryawan> {
     }
   }
 
-
-
   @override
   Widget build(BuildContext context) {
     final fotoUrl = buildUploadUrl(_fotoProfil);
@@ -483,141 +506,326 @@ class _LayarDashboardKaryawanState extends State<LayarDashboardKaryawan> {
       child: Scaffold(
         backgroundColor: TemaAplikasi.latar,
         body: RefreshIndicator(
-        onRefresh: _loadDashboard,
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: EdgeInsets.zero,
-          children: [
-            KeyedSubtree(
-              key: _tutorialHeaderKey,
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(20, 54, 20, 24),
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [TemaAplikasi.biruTua, Color(0xFF173D67)],
+          onRefresh: _loadDashboard,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: EdgeInsets.zero,
+            children: [
+              KeyedSubtree(
+                key: _tutorialHeaderKey,
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(20, 54, 20, 24),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [TemaAplikasi.biruTua, Color(0xFF173D67)],
+                    ),
+                    borderRadius: BorderRadius.only(
+                      bottomLeft: Radius.circular(24),
+                      bottomRight: Radius.circular(24),
+                    ),
                   ),
-                  borderRadius: BorderRadius.only(
-                    bottomLeft: Radius.circular(24),
-                    bottomRight: Radius.circular(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 24,
+                            backgroundColor: Colors.white,
+                            backgroundImage: fotoUrl.isEmpty
+                                ? null
+                                : NetworkImage(fotoUrl),
+                            child: fotoUrl.isEmpty
+                                ? const Icon(
+                                    Icons.person,
+                                    color: Color(0xFFD2A92B),
+                                  )
+                                : null,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Halo, $_namaLengkap',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              IconButton(
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => LayarNotifikasiKaryawan(
+                                        username: _username,
+                                      ),
+                                    ),
+                                  ).then((_) => _loadDashboard());
+                                },
+                                icon: const Icon(Icons.notifications_none),
+                                color: Colors.white,
+                              ),
+                              if (_notifBelumDibaca > 0)
+                                Positioned(
+                                  right: 8,
+                                  top: 8,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 4,
+                                      vertical: 2,
+                                    ),
+                                    decoration: const BoxDecoration(
+                                      color: Colors.red,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Text(
+                                      _notifBelumDibaca > 99
+                                          ? '99+'
+                                          : _notifBelumDibaca.toString(),
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 18),
+                      KeyedSubtree(
+                        key: _tutorialQuickActionKey,
+                        child: _quickActions(context),
+                      ),
+                      const SizedBox(height: 18),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: [
+                          _HeaderInfoPill(
+                            ikon: Icons.rule_folder_outlined,
+                            label: _labelAturanPengajuan(),
+                            warna: warnaAturan,
+                          ),
+                          _HeaderInfoPill(
+                            ikon: Icons.schedule_outlined,
+                            label: _cooldownHariAkun() == 0
+                                ? 'Tanpa Pending Pengajuan'
+                                : 'Pending Pengajuan ${_cooldownHariAkun()} hari',
+                            warna: TemaAplikasi.emas,
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
+              ),
+              const SizedBox(height: 16),
+              KeyedSubtree(
+                key: _tutorialStatusKey,
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 24,
-                          backgroundColor: Colors.white,
-                          backgroundImage: fotoUrl.isEmpty
-                              ? null
-                              : NetworkImage(fotoUrl),
-                          child: fotoUrl.isEmpty
-                              ? const Icon(
-                                  Icons.person,
-                                  color: Color(0xFFD2A92B),
-                                )
-                              : null,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'Halo, $_namaLengkap',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Row(
+                        children: const [
+                          Text(
+                            'Status Pengajuan',
+                            style: TextStyle(
+                              fontSize: 18,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                        ),
-                        Stack(
-                          clipBehavior: Clip.none,
-                          children: [
-                            IconButton(
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => LayarNotifikasiKaryawan(
-                                      username: _username,
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: _loading
+                          ? const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(16),
+                                child: CircularProgressIndicator(),
+                              ),
+                            )
+                          : Card(
+                              child: Padding(
+                                padding: const EdgeInsets.all(14),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    if (_pengajuanTerakhir == null)
+                                      const Text(
+                                        'Belum ada pengajuan APD. Gunakan menu "Buat Pengajuan" untuk mulai.',
+                                      )
+                                    else ...[
+                                      Text(
+                                        '${_pengajuanTerakhir?['nama_apd'] ?? '-'}',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Wrap(
+                                        spacing: 8,
+                                        runSpacing: 8,
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 10,
+                                              vertical: 4,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: lastStatusColor.withValues(
+                                                alpha: 0.15,
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(20),
+                                            ),
+                                            child: Text(
+                                              _statusLabel(lastStatus),
+                                              style: TextStyle(
+                                                color: lastStatusColor,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                          ),
+                                          if (_pengajuanTerakhir?['tanggal_pengajuan'] !=
+                                              null)
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 10,
+                                                    vertical: 4,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: TemaAplikasi.biruMuda,
+                                                borderRadius:
+                                                    BorderRadius.circular(20),
+                                              ),
+                                              child: Text(
+                                                'Terakhir: ${_tanggalRingkas(_pengajuanTerakhir?['tanggal_pengajuan']?.toString())}',
+                                                style: const TextStyle(
+                                                  color: TemaAplikasi.biruTua,
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ],
+                                    const SizedBox(height: 14),
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.all(14),
+                                      decoration: BoxDecoration(
+                                        color: _warnaAturanPengajuan()
+                                            .withValues(alpha: 0.10),
+                                        borderRadius: BorderRadius.circular(18),
+                                        border: Border.all(
+                                          color: _warnaAturanPengajuan()
+                                              .withValues(alpha: 0.16),
+                                        ),
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Icon(
+                                                _bisaAjukanSekarang()
+                                                    ? Icons.verified_outlined
+                                                    : Icons.timelapse_outlined,
+                                                color: _warnaAturanPengajuan(),
+                                              ),
+                                              const SizedBox(width: 10),
+                                              Expanded(
+                                                child: Text(
+                                                  _labelAturanPengajuan(),
+                                                  style: TextStyle(
+                                                    color:
+                                                        _warnaAturanPengajuan(),
+                                                    fontWeight: FontWeight.w800,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            _aturanPengajuan['pesan']
+                                                    ?.toString() ??
+                                                'Aturan pengajuan akun akan muncul di sini.',
+                                            style: const TextStyle(
+                                              height: 1.45,
+                                              color: TemaAplikasi.teksUtama,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 10),
+                                          Wrap(
+                                            spacing: 8,
+                                            runSpacing: 8,
+                                            children: [
+                                              _InfoStatusChip(
+                                                warna: TemaAplikasi.biruTua,
+                                                label: _cooldownHariAkun() == 0
+                                                    ? 'Tanpa Pending Pengajuan'
+                                                    : 'Pending Pengajuan ${_cooldownHariAkun()} hari',
+                                              ),
+                                              if ((_aturanPengajuan['status']
+                                                          ?.toString() ??
+                                                      '') ==
+                                                  'cooldown')
+                                                _InfoStatusChip(
+                                                  warna: TemaAplikasi.emasTua,
+                                                  label: _sisaHariCooldown() > 0
+                                                      ? 'Sisa ${_sisaHariCooldown()} hari'
+                                                      : 'Masih pending',
+                                                ),
+                                              if ((_aturanPengajuan['tanggal_boleh_ajukan']
+                                                          ?.toString() ??
+                                                      '')
+                                                  .isNotEmpty)
+                                                _InfoStatusChip(
+                                                  warna: TemaAplikasi.emasTua,
+                                                  label:
+                                                      'Ajukan lagi ${_tanggalBolehAjukanLabel()}',
+                                                ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                ).then((_) => _loadDashboard());
-                              },
-                              icon: const Icon(Icons.notifications_none),
-                              color: Colors.white,
-                            ),
-                            if (_notifBelumDibaca > 0)
-                              Positioned(
-                                right: 8,
-                                top: 8,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 4,
-                                    vertical: 2,
-                                  ),
-                                  decoration: const BoxDecoration(
-                                    color: Colors.red,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Text(
-                                    _notifBelumDibaca > 99
-                                        ? '99+'
-                                        : _notifBelumDibaca.toString(),
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                    textAlign: TextAlign.center,
-                                  ),
+                                  ],
                                 ),
                               ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 18),
-                    KeyedSubtree(
-                      key: _tutorialQuickActionKey,
-                      child: _quickActions(context),
-                    ),
-                    const SizedBox(height: 18),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: [
-                        _HeaderInfoPill(
-                          ikon: Icons.rule_folder_outlined,
-                          label: _labelAturanPengajuan(),
-                          warna: warnaAturan,
-                        ),
-                        _HeaderInfoPill(
-                          ikon: Icons.schedule_outlined,
-                          label: _cooldownHariAkun() == 0
-                              ? 'Tanpa Pending Pengajuan'
-                              : 'Pending Pengajuan ${_cooldownHariAkun()} hari',
-                          warna: TemaAplikasi.emas,
-                        ),
-                      ],
+                            ),
                     ),
                   ],
                 ),
               ),
-            ),
-            const SizedBox(height: 16),
-            KeyedSubtree(
-              key: _tutorialStatusKey,
-              child: Column(
+              const SizedBox(height: 18),
+              Column(
                 children: [
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Row(
                       children: const [
                         Text(
-                          'Status Pengajuan',
+                          'Berita',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -630,488 +838,308 @@ class _LayarDashboardKaryawanState extends State<LayarDashboardKaryawan> {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: _loading
-                        ? const Center(
+                        ? const SizedBox.shrink()
+                        : beritaUtama.isEmpty
+                        ? const Card(
                             child: Padding(
-                              padding: EdgeInsets.all(16),
-                              child: CircularProgressIndicator(),
-                            ),
-                          )
-                        : Card(
-                            child: Padding(
-                              padding: const EdgeInsets.all(14),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  if (_pengajuanTerakhir == null)
-                                    const Text(
-                                      'Belum ada pengajuan APD. Gunakan menu "Buat Pengajuan" untuk mulai.',
-                                    )
-                                  else ...[
-                                    Text(
-                                      '${_pengajuanTerakhir?['nama_apd'] ?? '-'}',
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 16,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Wrap(
-                                      spacing: 8,
-                                      runSpacing: 8,
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 10,
-                                            vertical: 4,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: lastStatusColor.withValues(
-                                              alpha: 0.15,
-                                            ),
-                                            borderRadius: BorderRadius.circular(
-                                              20,
-                                            ),
-                                          ),
-                                          child: Text(
-                                            _statusLabel(lastStatus),
-                                            style: TextStyle(
-                                              color: lastStatusColor,
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                          ),
-                                        ),
-                                        if (_pengajuanTerakhir?['tanggal_pengajuan'] !=
-                                            null)
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 10,
-                                              vertical: 4,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: TemaAplikasi.biruMuda,
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                            ),
-                                            child: Text(
-                                              'Terakhir: ${_tanggalRingkas(_pengajuanTerakhir?['tanggal_pengajuan']?.toString())}',
-                                              style: const TextStyle(
-                                                color: TemaAplikasi.biruTua,
-                                                fontWeight: FontWeight.w700,
-                                              ),
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ],
-                                  const SizedBox(height: 14),
-                                  Container(
-                                    width: double.infinity,
-                                    padding: const EdgeInsets.all(14),
-                                    decoration: BoxDecoration(
-                                      color: _warnaAturanPengajuan().withValues(
-                                        alpha: 0.10,
-                                      ),
-                                      borderRadius: BorderRadius.circular(18),
-                                      border: Border.all(
-                                        color: _warnaAturanPengajuan()
-                                            .withValues(alpha: 0.16),
-                                      ),
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          children: [
-                                            Icon(
-                                              _bisaAjukanSekarang()
-                                                  ? Icons.verified_outlined
-                                                  : Icons.timelapse_outlined,
-                                              color: _warnaAturanPengajuan(),
-                                            ),
-                                            const SizedBox(width: 10),
-                                            Expanded(
-                                              child: Text(
-                                                _labelAturanPengajuan(),
-                                                style: TextStyle(
-                                                  color:
-                                                      _warnaAturanPengajuan(),
-                                                  fontWeight: FontWeight.w800,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 8),
-                                        Text(
-                                          _aturanPengajuan['pesan']
-                                                  ?.toString() ??
-                                              'Aturan pengajuan akun akan muncul di sini.',
-                                          style: const TextStyle(
-                                            height: 1.45,
-                                            color: TemaAplikasi.teksUtama,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 10),
-                                        Wrap(
-                                          spacing: 8,
-                                          runSpacing: 8,
-                                          children: [
-                                            _InfoStatusChip(
-                                              warna: TemaAplikasi.biruTua,
-                                              label: _cooldownHariAkun() == 0
-                                                  ? 'Tanpa Pending Pengajuan'
-                                                  : 'Pending Pengajuan ${_cooldownHariAkun()} hari',
-                                            ),
-                                            if ((_aturanPengajuan['status']
-                                                        ?.toString() ??
-                                                    '') ==
-                                                'cooldown')
-                                              _InfoStatusChip(
-                                                warna: TemaAplikasi.emasTua,
-                                                label: _sisaHariCooldown() > 0
-                                                    ? 'Sisa ${_sisaHariCooldown()} hari'
-                                                    : 'Masih pending',
-                                              ),
-                                            if ((_aturanPengajuan['tanggal_boleh_ajukan']
-                                                        ?.toString() ??
-                                                    '')
-                                                .isNotEmpty)
-                                              _InfoStatusChip(
-                                                warna: TemaAplikasi.emasTua,
-                                                label:
-                                                    'Ajukan lagi ${_tanggalBolehAjukanLabel()}',
-                                              ),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
+                              padding: EdgeInsets.all(14),
+                              child: Text(
+                                'Belum ada berita terbaru dari admin.',
                               ),
                             ),
+                          )
+                        : Column(
+                            children: [
+                              SizedBox(
+                                height: 280,
+                                child: PageView.builder(
+                                  controller: _beritaPageController,
+                                  itemCount: beritaUtama.length,
+                                  onPageChanged: (index) {
+                                    if (!mounted) return;
+                                    setState(() => _beritaAktifIndex = index);
+                                  },
+                                  itemBuilder: (_, index) {
+                                    final item = beritaUtama[index];
+                                    final gambarUrl = buildUploadUrl(
+                                      item['gambar']?.toString(),
+                                    );
+                                    return Padding(
+                                      padding: EdgeInsets.only(
+                                        right: index == beritaUtama.length - 1
+                                            ? 0
+                                            : 12,
+                                      ),
+                                      child: InkWell(
+                                        borderRadius: BorderRadius.circular(24),
+                                        onTap: () => _bukaDetailBerita(item),
+                                        child: Card(
+                                          clipBehavior: Clip.antiAlias,
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Expanded(
+                                                child: gambarUrl.isEmpty
+                                                    ? Container(
+                                                        decoration:
+                                                            const BoxDecoration(
+                                                              gradient: LinearGradient(
+                                                                begin: Alignment
+                                                                    .topLeft,
+                                                                end: Alignment
+                                                                    .bottomRight,
+                                                                colors: [
+                                                                  TemaAplikasi
+                                                                      .biruTua,
+                                                                  Color(
+                                                                    0xFF355C8A,
+                                                                  ),
+                                                                ],
+                                                              ),
+                                                            ),
+                                                        alignment:
+                                                            Alignment.center,
+                                                        child: const Icon(
+                                                          Icons
+                                                              .article_outlined,
+                                                          size: 44,
+                                                          color: Colors.white,
+                                                        ),
+                                                      )
+                                                    : Image.network(
+                                                        gambarUrl,
+                                                        fit: BoxFit.cover,
+                                                        width: double.infinity,
+                                                        errorBuilder:
+                                                            (
+                                                              context,
+                                                              error,
+                                                              stackTrace,
+                                                            ) => Container(
+                                                              color: Colors
+                                                                  .grey
+                                                                  .shade100,
+                                                              alignment:
+                                                                  Alignment
+                                                                      .center,
+                                                              child: const Icon(
+                                                                Icons
+                                                                    .broken_image_outlined,
+                                                                color:
+                                                                    TemaAplikasi
+                                                                        .netral,
+                                                              ),
+                                                            ),
+                                                      ),
+                                              ),
+                                              Padding(
+                                                padding:
+                                                    const EdgeInsets.fromLTRB(
+                                                      16,
+                                                      14,
+                                                      16,
+                                                      16,
+                                                    ),
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Wrap(
+                                                      spacing: 8,
+                                                      runSpacing: 8,
+                                                      children: [
+                                                        Container(
+                                                          padding:
+                                                              const EdgeInsets.symmetric(
+                                                                horizontal: 10,
+                                                                vertical: 5,
+                                                              ),
+                                                          decoration: BoxDecoration(
+                                                            color: TemaAplikasi
+                                                                .biruMuda,
+                                                            borderRadius:
+                                                                BorderRadius.circular(
+                                                                  999,
+                                                                ),
+                                                          ),
+                                                          child: Text(
+                                                            item['kategori']
+                                                                    ?.toString() ??
+                                                                'Berita',
+                                                            style: const TextStyle(
+                                                              color:
+                                                                  TemaAplikasi
+                                                                      .biruTua,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w700,
+                                                              fontSize: 12,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                        Text(
+                                                          _tanggalRingkas(
+                                                            item['tanggal']
+                                                                ?.toString(),
+                                                          ),
+                                                          style:
+                                                              const TextStyle(
+                                                                color:
+                                                                    TemaAplikasi
+                                                                        .netral,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w600,
+                                                              ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                    const SizedBox(height: 10),
+                                                    Text(
+                                                      item['judul']
+                                                              ?.toString() ??
+                                                          '-',
+                                                      maxLines: 2,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      style: const TextStyle(
+                                                        fontSize: 17,
+                                                        fontWeight:
+                                                            FontWeight.w800,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(height: 8),
+                                                    Text(
+                                                      item['ringkasan']
+                                                              ?.toString() ??
+                                                          '',
+                                                      maxLines: 3,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      style: const TextStyle(
+                                                        color: TemaAplikasi
+                                                            .teksUtama,
+                                                        height: 1.45,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(height: 10),
+                                                    const Text(
+                                                      'Geser untuk berita lain - tekan untuk buka detail',
+                                                      style: TextStyle(
+                                                        color:
+                                                            TemaAplikasi.netral,
+                                                        fontSize: 12,
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                              if (beritaUtama.length > 1) ...[
+                                const SizedBox(height: 12),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: List.generate(beritaUtama.length, (
+                                    index,
+                                  ) {
+                                    final aktif = index == _beritaAktifIndex;
+                                    return AnimatedContainer(
+                                      duration: const Duration(
+                                        milliseconds: 220,
+                                      ),
+                                      margin: const EdgeInsets.symmetric(
+                                        horizontal: 3,
+                                      ),
+                                      width: aktif ? 20 : 8,
+                                      height: 8,
+                                      decoration: BoxDecoration(
+                                        color: aktif
+                                            ? const Color(0xFFD2A92B)
+                                            : Colors.grey.shade300,
+                                        borderRadius: BorderRadius.circular(
+                                          999,
+                                        ),
+                                      ),
+                                    );
+                                  }),
+                                ),
+                              ],
+                            ],
                           ),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 18),
-            Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
-                    children: const [
-                      Text(
-                        'Berita',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
+              const SizedBox(height: 24),
+            ],
+          ),
+        ),
+        bottomNavigationBar: BottomNavigationBar(
+          key: _tutorialBottomNavKey,
+          currentIndex: _selectedIndex,
+          selectedItemColor: const Color(0xFFD2A92B),
+          onTap: (index) {
+            if (index == 0) {
+              setState(() {
+                _selectedIndex = 0;
+              });
+              return;
+            }
+
+            if (index == 1) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      LayarLaporKendalaKaryawan(username: _username),
                 ),
-                const SizedBox(height: 10),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: _loading
-                      ? const SizedBox.shrink()
-                      : beritaUtama.isEmpty
-                      ? const Card(
-                          child: Padding(
-                            padding: EdgeInsets.all(14),
-                            child: Text(
-                              'Belum ada berita terbaru dari admin.',
-                            ),
-                          ),
-                        )
-                      : Column(
-                          children: [
-                            SizedBox(
-                              height: 280,
-                              child: PageView.builder(
-                                controller: _beritaPageController,
-                                itemCount: beritaUtama.length,
-                                onPageChanged: (index) {
-                                  if (!mounted) return;
-                                  setState(() => _beritaAktifIndex = index);
-                                },
-                                itemBuilder: (_, index) {
-                                  final item = beritaUtama[index];
-                                  final gambarUrl = buildUploadUrl(
-                                    item['gambar']?.toString(),
-                                  );
-                                  return Padding(
-                                    padding: EdgeInsets.only(
-                                      right: index == beritaUtama.length - 1
-                                          ? 0
-                                          : 12,
-                                    ),
-                                    child: InkWell(
-                                      borderRadius: BorderRadius.circular(24),
-                                      onTap: () => _bukaDetailBerita(item),
-                                      child: Card(
-                                        clipBehavior: Clip.antiAlias,
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Expanded(
-                                              child: gambarUrl.isEmpty
-                                                  ? Container(
-                                                      decoration:
-                                                          const BoxDecoration(
-                                                        gradient: LinearGradient(
-                                                          begin: Alignment
-                                                              .topLeft,
-                                                          end: Alignment
-                                                              .bottomRight,
-                                                          colors: [
-                                                            TemaAplikasi
-                                                                .biruTua,
-                                                            Color(
-                                                              0xFF355C8A,
-                                                            ),
-                                                          ],
-                                                        ),
-                                                      ),
-                                                      alignment:
-                                                          Alignment.center,
-                                                      child: const Icon(
-                                                        Icons
-                                                            .article_outlined,
-                                                        size: 44,
-                                                        color: Colors.white,
-                                                      ),
-                                                    )
-                                                  : Image.network(
-                                                      gambarUrl,
-                                                      fit: BoxFit.cover,
-                                                      width: double.infinity,
-                                                      errorBuilder: (context, error, stackTrace) => Container(
-                                                        color: Colors
-                                                            .grey
-                                                            .shade100,
-                                                        alignment:
-                                                            Alignment
-                                                                .center,
-                                                        child: const Icon(
-                                                          Icons
-                                                              .broken_image_outlined,
-                                                          color:
-                                                              TemaAplikasi
-                                                                  .netral,
-                                                        ),
-                                                      ),
-                                                    ),
-                                            ),
-                                            Padding(
-                                              padding:
-                                                  const EdgeInsets.fromLTRB(
-                                                    16,
-                                                    14,
-                                                    16,
-                                                    16,
-                                                  ),
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  Wrap(
-                                                    spacing: 8,
-                                                    runSpacing: 8,
-                                                    children: [
-                                                      Container(
-                                                        padding:
-                                                            const EdgeInsets.symmetric(
-                                                              horizontal: 10,
-                                                              vertical: 5,
-                                                            ),
-                                                        decoration: BoxDecoration(
-                                                          color: TemaAplikasi
-                                                              .biruMuda,
-                                                          borderRadius:
-                                                              BorderRadius.circular(
-                                                                999,
-                                                              ),
-                                                        ),
-                                                        child: Text(
-                                                          item['kategori']
-                                                                  ?.toString() ??
-                                                              'Berita',
-                                                          style: const TextStyle(
-                                                            color:
-                                                                TemaAplikasi
-                                                                    .biruTua,
-                                                            fontWeight:
-                                                                FontWeight
-                                                                    .w700,
-                                                            fontSize: 12,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                      Text(
-                                                        _tanggalRingkas(
-                                                          item['tanggal']
-                                                              ?.toString(),
-                                                        ),
-                                                        style:
-                                                            const TextStyle(
-                                                              color:
-                                                                  TemaAplikasi
-                                                                      .netral,
-                                                              fontWeight:
-                                                                  FontWeight
-                                                                      .w600,
-                                                            ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                  const SizedBox(height: 10),
-                                                  Text(
-                                                    item['judul']
-                                                            ?.toString() ??
-                                                        '-',
-                                                    maxLines: 2,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                    style: const TextStyle(
-                                                      fontSize: 17,
-                                                      fontWeight:
-                                                          FontWeight.w800,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(height: 8),
-                                                  Text(
-                                                    item['ringkasan']
-                                                            ?.toString() ??
-                                                        '',
-                                                    maxLines: 3,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                    style: const TextStyle(
-                                                      color: TemaAplikasi
-                                                          .teksUtama,
-                                                      height: 1.45,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(height: 10),
-                                                  const Text(
-                                                    'Geser untuk berita lain - tekan untuk buka detail',
-                                                    style: TextStyle(
-                                                      color:
-                                                          TemaAplikasi.netral,
-                                                      fontSize: 12,
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                            if (beritaUtama.length > 1) ...[
-                              const SizedBox(height: 12),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: List.generate(beritaUtama.length, (
-                                  index,
-                                ) {
-                                  final aktif = index == _beritaAktifIndex;
-                                  return AnimatedContainer(
-                                    duration: const Duration(
-                                      milliseconds: 220,
-                                    ),
-                                    margin: const EdgeInsets.symmetric(
-                                      horizontal: 3,
-                                    ),
-                                    width: aktif ? 20 : 8,
-                                    height: 8,
-                                    decoration: BoxDecoration(
-                                      color: aktif
-                                          ? const Color(0xFFD2A92B)
-                                          : Colors.grey.shade300,
-                                      borderRadius: BorderRadius.circular(
-                                        999,
-                                      ),
-                                    ),
-                                  );
-                                }),
-                              ),
-                            ],
-                          ],
-                        ),
+              ).then((_) {
+                if (!mounted) return;
+                setState(() => _selectedIndex = 0);
+              });
+              return;
+            }
+
+            if (index == 2) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => LayarKalenderKaryawan(username: _username),
                 ),
-              ],
+              ).then((_) {
+                if (!mounted) return;
+                setState(() => _selectedIndex = 0);
+              });
+              return;
+            }
+
+            if (index == 3) {
+              _bukaProfil();
+            }
+          },
+          items: const [
+            BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Beranda'),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.report_problem_outlined),
+              label: 'Lapor',
             ),
-            const SizedBox(height: 24),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.calendar_month),
+              label: 'Kalender',
+            ),
+            BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profil'),
           ],
         ),
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        key: _tutorialBottomNavKey,
-        currentIndex: _selectedIndex,
-        selectedItemColor: const Color(0xFFD2A92B),
-        onTap: (index) {
-          if (index == 0) {
-            setState(() {
-              _selectedIndex = 0;
-            });
-            return;
-          }
-
-          if (index == 1) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => LayarLaporKendalaKaryawan(username: _username),
-              ),
-            ).then((_) {
-              if (!mounted) return;
-              setState(() => _selectedIndex = 0);
-            });
-            return;
-          }
-
-          if (index == 2) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => LayarKalenderKaryawan(username: _username),
-              ),
-            ).then((_) {
-              if (!mounted) return;
-              setState(() => _selectedIndex = 0);
-            });
-            return;
-          }
-
-          if (index == 3) {
-            _bukaProfil();
-          }
-        },
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Beranda'),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.report_problem_outlined),
-            label: 'Lapor',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.calendar_month),
-            label: 'Kalender',
-          ),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profil'),
-        ],
-      ),
-    ),
     );
   }
 
@@ -1126,9 +1154,7 @@ class _LayarDashboardKaryawanState extends State<LayarDashboardKaryawan> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => LayarPengajuanDokumenApd(
-                    username: _username,
-                  ),
+                  builder: (_) => LayarPengajuanDokumenApd(username: _username),
                 ),
               ).then((_) => _loadDashboard());
             },

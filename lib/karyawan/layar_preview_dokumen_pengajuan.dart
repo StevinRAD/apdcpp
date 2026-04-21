@@ -94,6 +94,31 @@ class _LayarPreviewDokumenPengajuanState
     return Colors.orange;
   }
 
+  /// Parse alasan JSON dan return format readable
+  String _formatAlasan(String? alasanRaw) {
+    if (alasanRaw == null || alasanRaw.isEmpty) return '-';
+
+    // Jika format JSON baru
+    if (alasanRaw.contains('{') && alasanRaw.contains('}')) {
+      try {
+        final jenisRegex = RegExp(r'"jenis_alasan"\s*:\s*"([^"]+)"');
+        final penjelasanRegex = RegExp(r'"penjelasan"\s*:\s*"([^"]*)"');
+        final jenisMatch = jenisRegex.firstMatch(alasanRaw);
+        final penjelasanMatch = penjelasanRegex.firstMatch(alasanRaw);
+
+        final jenis = jenisMatch?.group(1) ?? alasanRaw;
+        final penjelasan = penjelasanMatch?.group(1) ?? '';
+
+        if (penjelasan.isNotEmpty) return '$jenis - $penjelasan';
+        return jenis;
+      } catch (_) {
+        // Fallback ke raw string jika error parsing
+      }
+    }
+
+    return alasanRaw;
+  }
+
   Future<void> _exportPdf() async {
     await PdfHelper.generateDokumenApdPdf(
       isPenerimaan: false,
@@ -209,24 +234,30 @@ class _LayarPreviewDokumenPengajuanState
                   ),
                 ),
                 const SizedBox(height: 10),
-                const Text(
-                  'PT. CENTRAL PROTEINA PRIMA, Tbk',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 16,
-                    color: TemaAplikasi.biruTua,
+                const FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    'PT. CENTRAL PROTEINA PRIMA, Tbk',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 16,
+                      color: TemaAplikasi.biruTua,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  'FORMULIR PERMINTAAN APD',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 14,
-                    color: TemaAplikasi.biruTua.withValues(alpha: 0.7),
-                    letterSpacing: 1.2,
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    'FORMULIR PERMINTAAN APD',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 14,
+                      color: TemaAplikasi.biruTua.withValues(alpha: 0.7),
+                      letterSpacing: 1.2,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -389,7 +420,7 @@ class _LayarPreviewDokumenPengajuanState
                                     if ((item['alasan']?.toString() ?? '')
                                         .isNotEmpty)
                                       Text(
-                                        'Alasan: ${item['alasan']}',
+                                        'Alasan: ${_formatAlasan(item['alasan']?.toString())}',
                                         style: TextStyle(
                                           fontSize: 11,
                                           color: Colors.grey.shade600,
@@ -441,36 +472,49 @@ class _LayarPreviewDokumenPengajuanState
                 ),
                 const SizedBox(height: 16),
 
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // TTD Karyawan
-                    Expanded(
-                      child: _buildTtdBox(
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isSmall = constraints.maxWidth < 360;
+                    final ttdWidgets = [
+                      _buildTtdBox(
                         'Pemohon',
                         _karyawan['nama_lengkap'] ?? '-',
                         _dokumen['tanda_tangan_karyawan']?.toString(),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    // TTD Admin/Safety
-                    Expanded(
-                      child: _buildTtdBox(
+                      _buildTtdBox(
                         'Safety / Admin',
                         _admin['nama_lengkap'] ?? '...................',
                         _dokumen['tanda_tangan_admin']?.toString(),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    // TTD Atasan
-                    Expanded(
-                      child: _buildTtdBox(
+                      _buildTtdBox(
                         'Atasan',
                         '...................',
                         null,
                       ),
-                    ),
-                  ],
+                    ];
+
+                    if (isSmall) {
+                      return Column(
+                        children: ttdWidgets
+                            .map((w) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 16),
+                                  child: w,
+                                ))
+                            .toList(),
+                      );
+                    }
+
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: ttdWidgets[0]),
+                        const SizedBox(width: 12),
+                        Expanded(child: ttdWidgets[1]),
+                        const SizedBox(width: 12),
+                        Expanded(child: ttdWidgets[2]),
+                      ],
+                    );
+                  },
                 ),
 
                 // Catatan admin (jika ada)
@@ -522,7 +566,7 @@ class _LayarPreviewDokumenPengajuanState
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 140,
+            width: 110,
             child: Text(
               label,
               style: TextStyle(

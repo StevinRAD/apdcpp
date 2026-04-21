@@ -176,7 +176,7 @@ class _LayarDashboardAdminState extends State<LayarDashboardAdmin> {
       icon: Icons.widgets_outlined,
       judul: 'Menu Cepat Admin',
       deskripsi:
-          'Tombol Persetujuan APD, Stok APD, dan Laporan dipakai untuk masuk ke proses utama tanpa harus mencari menu lain.',
+          'Tombol Persetujuan APD, Stok APD, Laporan, Banding Login, Dokumen Pengajuan, dan Tanda Tangan dipakai untuk masuk ke proses utama.',
       warna: Colors.indigo,
       targetKey: _tutorialAdminMenuCepatKey,
       onSebelumTampil: () => _arahkanTutorialKeTab(0),
@@ -826,113 +826,117 @@ class _TabAdminBerandaState extends State<TabAdminBeranda> {
                 const SizedBox(height: 18),
                 KeyedSubtree(
                   key: widget.tutorialMenuCepatKey,
-                  child: Row(
+                  child: Column(
                     children: [
-                      Expanded(
-                        child: _menuButton(
-                          icon: Icons.fact_check_outlined,
-                          label: 'Persetujuan\nAPD',
-                          badgeCount: _pengajuanMenunggu,
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => LayarPersetujuanApdAdmin(
-                                  usernameAdmin: widget.username,
-                                ),
-                              ),
-                            ).then((_) => _loadData());
-                          },
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _menuButton(
+                              icon: Icons.fact_check_outlined,
+                              label: 'Persetujuan\nAPD',
+                              badgeCount: _pengajuanMenunggu,
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => LayarPersetujuanApdAdmin(
+                                      usernameAdmin: widget.username,
+                                    ),
+                                  ),
+                                ).then((_) => _loadData());
+                              },
+                            ),
+                          ),
+                          Expanded(
+                            child: _menuButton(
+                              icon: Icons.inventory_2_outlined,
+                              label: 'Stok\nAPD',
+                              badgeCount: _stokMenipis,
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const LayarMasterApdAdmin(),
+                                  ),
+                                ).then((_) => _loadData());
+                              },
+                            ),
+                          ),
+                          Expanded(
+                            child: _menuButton(
+                              icon: Icons.assessment_outlined,
+                              label: 'Laporan',
+                              badgeCount: _laporanBaru,
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => LayarLaporanApdAdmin(
+                                      usernameAdmin: widget.username,
+                                    ),
+                                  ),
+                                ).then((_) => _loadData());
+                              },
+                            ),
+                          ),
+                          Expanded(
+                            child: _menuButton(
+                              icon: Icons.support_agent_outlined,
+                              label: 'Banding\nLogin',
+                              badgeCount: _bandingLoginMenunggu,
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const LayarBantuanLoginAdmin(),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
                       ),
-                      Expanded(
-                        child: _menuButton(
-                          icon: Icons.inventory_2_outlined,
-                          label: 'Stok\nAPD',
-                          badgeCount: _stokMenipis,
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const LayarMasterApdAdmin(),
-                              ),
-                            ).then((_) => _loadData());
-                          },
-                        ),
-                      ),
-                      Expanded(
-                        child: _menuButton(
-                          icon: Icons.assessment_outlined,
-                          label: 'Laporan',
-                          badgeCount: _laporanBaru,
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => LayarLaporanApdAdmin(
-                                  usernameAdmin: widget.username,
-                                ),
-                              ),
-                            ).then((_) => _loadData());
-                          },
-                        ),
-                      ),
-                      Expanded(
-                        child: _menuButton(
-                          icon: Icons.support_agent_outlined,
-                          label: 'Banding\nLogin',
-                          badgeCount: _bandingLoginMenunggu,
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const LayarBantuanLoginAdmin(),
-                              ),
-                            );
-                          },
-                        ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _menuButton(
+                              icon: Icons.description_outlined,
+                              label: 'Dokumen\nPengajuan',
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => LayarDaftarDokumenAdmin(
+                                      username: widget.username,
+                                    ),
+                                  ),
+                                ).then((_) => _loadData());
+                              },
+                            ),
+                          ),
+                          Expanded(
+                            child: _menuButton(
+                              icon: Icons.draw_outlined,
+                              label: 'Tanda\nTangan',
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => LayarTandaTanganAdmin(
+                                      username: widget.username,
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                          const Expanded(child: SizedBox()),
+                          const Expanded(child: SizedBox()),
+                        ],
                       ),
                     ],
                   ),
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _menuButton(
-                        icon: Icons.description_outlined,
-                        label: 'Dokumen\nPengajuan',
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => LayarDaftarDokumenAdmin(
-                                username: widget.username,
-                              ),
-                            ),
-                          ).then((_) => _loadData());
-                        },
-                      ),
-                    ),
-                    Expanded(
-                      child: _menuButton(
-                        icon: Icons.draw_outlined,
-                        label: 'Tanda\nTangan',
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => LayarTandaTanganAdmin(
-                                username: widget.username,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                    const Expanded(child: SizedBox()),
-                    const Expanded(child: SizedBox()),
-                  ],
                 ),
               ],
             ),
