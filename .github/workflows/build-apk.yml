@@ -2,25 +2,35 @@ name: Build APK Android
 
 on:
   push:
-    branches: [ master, main ]
+    branches: [master, main]
   pull_request:
-    branches: [ master, main ]
+    branches: [master, main]
   workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Buat GitHub Release'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+      apk_name: ${{ steps.get_version.outputs.apk_name }}
 
     steps:
     - name: Checkout kode
       uses: actions/checkout@v4
 
     - name: Setup Flutter
-      uses: subosito/flutter-action@v2
+      uses: subosito/flutter-action@v3
       with:
         channel: 'stable'
+        flutter-version: '3.27.5'
         cache: true
-        pub-cache-key: 'pub-cache'
 
     - name: Download dependencies
       run: flutter pub get
@@ -32,37 +42,119 @@ jobs:
           ~/.gradle/caches
           ~/.gradle/wrapper
           android/.gradle
-        key: ${{ runner.os }}-gradle-${{ hashFiles('**/pubspec.lock', '**/*.gradle*', '**/gradle-wrapper.properties') }}
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
         restore-keys: |
           ${{ runner.os }}-gradle-
 
-    - name: Setup Gradle untuk memory dan watcher issues
+    - name: Setup Gradle untuk build yang optimal
       run: |
         echo "org.gradle.jvmargs=-Xmx4096M -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8" >> android/gradle.properties
         echo "org.gradle.daemon=false" >> android/gradle.properties
         echo "org.gradle.parallel=true" >> android/gradle.properties
         echo "org.gradle.caching=true" >> android/gradle.properties
+        echo "org.gradle.configureondemand=true" >> android/gradle.properties
         echo "android.enableR8.fullMode=true" >> android/gradle.properties
+
+    - name: Get version info
+      id: get_version
+      run: |
+        VERSION=$(grep 'version: ' pubspec.yaml | head -1 | awk '{print $2}')
+        VERSION_CODE=$(echo $VERSION | grep -oP '\d+$')
+        APK_NAME="cp-care-v${VERSION}-$(date +'%Y%m%d')-${{ github.run_number }}.apk"
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
+        echo "apk_name=$APK_NAME" >> $GITHUB_OUTPUT
+        echo "Version: $VERSION"
+        echo "APK Name: $APK_NAME"
 
     - name: Build APK Release
       run: flutter build apk --release --no-tree-shake-icons
       env:
         FLUTTER_AUTO_WATCH: false
 
-    - name: Upload APK
+    - name: Rename APK
+      run: |
+        mv build/app/outputs/flutter-apk/app-release.apk "build/app/outputs/flutter-apk/${{ steps.get_version.outputs.apk_name }}"
+
+    - name: Upload APK sebagai artifact
       uses: actions/upload-artifact@v4
       with:
-        name: apdcpp-release-apk
-        path: build/app/outputs/flutter-apk/app-release.apk
-        retention-days: 30
+        name: cp-care-apk
+        path: build/app/outputs/flutter-apk/${{ steps.get_version.outputs.apk_name }}
+        retention-days: 90
 
-    - name: Release Summary
+    - name: Build Summary
       run: |
         echo "## ✅ Build Berhasil!" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### 📱 APK Release" >> $GITHUB_STEP_SUMMARY
-        echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-        echo "- **Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
-        echo "- **Tanggal**: $(date +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_STEP_SUMMARY
+        echo "### 📱 CP Care - APK Release" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "Download APK dari tab **Artifacts** di bawah." >> $GITHUB_STEP_SUMMARY
+        echo "| Detail | Info |" >> $GITHUB_STEP_SUMMARY
+        echo "|--------|------|" >> $GITHUB_STEP_SUMMARY
+        echo "| **Version** | ${{ steps.get_version.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| **Commit** | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| **Branch** | ${{ github.ref_name }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| **Tanggal** | $(date +'%Y-%m-%d %H:%M:%S UTC') |" >> $GITHUB_STEP_SUMMARY
+        echo "| **Workflow** | #${{ github.run_number }} |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📥 Download" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "Download APK dari tab **Artifacts** di bawah:" >> $GITHUB_STEP_SUMMARY
+        echo "- \`${{ steps.get_version.outputs.apk_name }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "---" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "<details>" >> $GITHUB_STEP_SUMMARY
+        echo "<summary>📋 Change Log</summary>" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        echo "${{ github.event.head_commit.message }}" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        echo "</details>" >> $GITHUB_STEP_SUMMARY
+
+  create_release:
+    needs: build
+    if: |
+      github.event_name == 'workflow_dispatch' && inputs.create_release == true ||
+      startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - name: Download APK artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: cp-care-apk
+        path: ./apk
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        name: CP Care v${{ needs.build.outputs.version }}
+        tag_name: v${{ needs.build.outputs.version }}
+        name_pattern: "cp-care-*.apk"
+        files: apk/*.apk
+        body: |
+          ## 📱 CP Care - v${{ needs.build.outputs.version }}
+
+          APK Release untuk Android dengan Application ID: `id.primasafety.cpcare`
+
+          ### Fitur:
+          - ✅ Notifikasi Android 13+ support
+          - ✅ Sistem pengajuan & persetujuan APD
+          - ✅ Dashboard Admin & Karyawan
+          - ✅ Upload bukti foto APD
+
+          ### Instalasi:
+          1. Download file APK di bawah
+          2. Install di perangkat Android
+          3. Aktifkan izin notifikasi saat pertama dibuka
+
+          ---
+          Build dari commit: ${{ github.sha }}
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

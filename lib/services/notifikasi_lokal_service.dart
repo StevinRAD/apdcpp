@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz_data;
 
@@ -52,9 +53,23 @@ class NotifikasiLokalService {
     _initialized = true;
   }
 
-  /// Request izin notifikasi (khusus iOS)
+  /// Request izin notifikasi (iOS & Android 13+)
   static Future<bool> requestIzinNotifikasi() async {
     if (kIsWeb) return true;
+
+    if (Platform.isAndroid) {
+      // Android 13+ (API 33+) butuh izin POST_NOTIFICATIONS
+      if (Platform.version.contains('33') || Platform.version.contains('34') || Platform.version.contains('35')) {
+        final status = await Permission.notification.request();
+        if (kDebugMode) {
+          print('Status izin notifikasi Android: ${status.isGranted}');
+        }
+        return status.isGranted;
+      }
+      // Android di bawah 13 tidak perlu izin
+      return true;
+    }
+
     if (Platform.isIOS) {
       final bool? result = await _notificationsPlugin
           .resolvePlatformSpecificImplementation<
@@ -66,24 +81,20 @@ class NotifikasiLokalService {
           );
       return result ?? false;
     }
-    // Android tidak perlu request izin untuk notifikasi lokal
+
     return true;
   }
 
   /// Cek apakah izin notifikasi diberikan
   static Future<bool> cekIzinNotifikasi() async {
     if (kIsWeb) return true;
+
     if (Platform.isAndroid) {
-      // Android 13+ perlu cek izin
-      final androidPlugin = _notificationsPlugin
-          .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>();
-      if (androidPlugin != null) {
-        final bool? granted = await androidPlugin.areNotificationsEnabled();
-        return granted ?? true;
-      }
-      return true;
+      // Cek izin menggunakan permission_handler untuk Android 13+
+      final status = await Permission.notification.status;
+      return status.isGranted || status.isLimited;
     }
+
     return true;
   }
 

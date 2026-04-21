@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">CP Care</string>
+    <string name="app_name_full">Prima Safety Care</string>
+    <string name="notification_channel_name">Notifikasi CP Care</string>
+    <string name="notification_channel_description">Channel untuk notifikasi aplikasi CP Care</string>
+</resources>
