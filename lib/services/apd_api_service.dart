@@ -2281,11 +2281,15 @@ class ApiApdService {
           orElse: () => const {},
         );
 
-        if (!_matchFilterPengajuan(dokumen['status'], statusPengajuan)) {
-          continue;
-        }
         final tanggalPengajuan = _parseDate(dokumen['tanggal_pengajuan']);
         if (!_inDateRange(tanggalPengajuan, start, end)) continue;
+
+        // Filter berdasarkan status item, bukan status dokumen
+        // Karena sistem baru memproses per item
+        final statusItem = _normalizeStatus(item['status']);
+        if (!_matchFilterPengajuan(statusItem, statusPengajuan)) {
+          continue;
+        }
 
         final karyawan = karyawanMapPengajuan[_readText(dokumen['id_karyawan'])];
         final apd = apdMap[_readText(item['id_apd'])];

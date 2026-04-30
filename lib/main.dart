@@ -30,7 +30,7 @@ class AplikasiAPD extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'CP Care',
+      title: 'Prima Safety Care',
       debugShowCheckedModeBanner: false,
       theme: TemaAplikasi.tema,
       home: const LayarUtama(),

@@ -59,7 +59,7 @@ jobs:
       run: |
         VERSION=$(grep 'version: ' pubspec.yaml | head -1 | awk '{print $2}')
         VERSION_CODE=$(echo $VERSION | grep -oP '\d+$')
-        APK_NAME="cp-care-v${VERSION}-$(date +'%Y%m%d')-${{ github.run_number }}.apk"
+        APK_NAME="prima-safety-care-v${VERSION}-$(date +'%Y%m%d')-${{ github.run_number }}.apk"
         echo "version=$VERSION" >> $GITHUB_OUTPUT
         echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
         echo "apk_name=$APK_NAME" >> $GITHUB_OUTPUT
@@ -78,7 +78,7 @@ jobs:
     - name: Upload APK sebagai artifact
       uses: actions/upload-artifact@v4
       with:
-        name: cp-care-apk
+        name: prima-safety-care-apk
         path: build/app/outputs/flutter-apk/${{ steps.get_version.outputs.apk_name }}
         retention-days: 90
 
@@ -86,7 +86,7 @@ jobs:
       run: |
         echo "## ✅ Build Berhasil!" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### 📱 CP Care - APK Release" >> $GITHUB_STEP_SUMMARY
+        echo "### 📱 Prima Safety Care - APK Release" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "| Detail | Info |" >> $GITHUB_STEP_SUMMARY
         echo "|--------|------|" >> $GITHUB_STEP_SUMMARY
@@ -124,18 +124,18 @@ jobs:
     - name: Download APK artifact
       uses: actions/download-artifact@v4
       with:
-        name: cp-care-apk
+        name: prima-safety-care-apk
         path: ./apk
 
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v2
       with:
-        name: CP Care v${{ needs.build.outputs.version }}
+        name: Prima Safety Care v${{ needs.build.outputs.version }}
         tag_name: v${{ needs.build.outputs.version }}
-        name_pattern: "cp-care-*.apk"
+        name_pattern: "prima-safety-care-*.apk"
         files: apk/*.apk
         body: |
-          ## 📱 CP Care - v${{ needs.build.outputs.version }}
+          ## 📱 Prima Safety Care - v${{ needs.build.outputs.version }}
 
           APK Release untuk Android dengan Application ID: `id.primasafety.cpcare`
 

@@ -23,6 +23,7 @@ class _LayarDaftarDokumenAdminState extends State<LayarDaftarDokumenAdmin> {
 
   bool _loading = true;
   List<Map<String, dynamic>> _dokumenList = [];
+  List<Map<String, dynamic>> _allDokumenList = []; // Simpan semua data untuk filter klien
   String _filterStatus = ''; // '' = semua
 
   @override
@@ -33,18 +34,38 @@ class _LayarDaftarDokumenAdminState extends State<LayarDaftarDokumenAdmin> {
 
   Future<void> _loadDokumen() async {
     setState(() => _loading = true);
+
+    // Untuk filter "selesai" dan "diproses", ambil semua data lalu filter di klien
+    // karena status ini dihitung berdasarkan item yang sudah diproses
+    final apiFilterStatus = (_filterStatus == 'selesai' || _filterStatus == 'diproses')
+        ? null
+        : (_filterStatus.isEmpty ? null : _filterStatus);
+
     final response = await _api.daftarDokumenPengajuan(
-      filterStatus: _filterStatus.isEmpty ? null : _filterStatus,
+      filterStatus: apiFilterStatus,
     );
     if (!mounted) return;
 
     if (_api.isSuccess(response)) {
+      final allData = _api.extractListData(response);
+
+      // Filter klien untuk SEMUA status termasuk status yang dihitung
+      List<Map<String, dynamic>> filteredData = allData;
+      if (_filterStatus.isNotEmpty) {
+        filteredData = allData.where((dok) {
+          final computedStatus = _computeDisplayStatus(dok);
+          return computedStatus == _filterStatus;
+        }).toList();
+      }
+
       setState(() {
-        _dokumenList = _api.extractListData(response);
+        _allDokumenList = allData;
+        _dokumenList = filteredData;
         _loading = false;
       });
     } else {
       setState(() {
+        _allDokumenList = [];
         _dokumenList = [];
         _loading = false;
       });
@@ -126,57 +147,70 @@ class _LayarDaftarDokumenAdminState extends State<LayarDaftarDokumenAdmin> {
           // Filter chips
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            child: Row(
-              children: [
-                _FilterChip(
-                  label: 'Semua',
-                  aktif: _filterStatus.isEmpty,
-                  onTap: () {
-                    _filterStatus = '';
-                    _loadDokumen();
-                  },
-                ),
-                const SizedBox(width: 8),
-                _FilterChip(
-                  label: 'Menunggu',
-                  aktif: _filterStatus == 'menunggu',
-                  warna: Colors.orange,
-                  onTap: () {
-                    _filterStatus = 'menunggu';
-                    _loadDokumen();
-                  },
-                ),
-                const SizedBox(width: 8),
-                _FilterChip(
-                  label: 'Diterima',
-                  aktif: _filterStatus == 'diterima',
-                  warna: TemaAplikasi.sukses,
-                  onTap: () {
-                    _filterStatus = 'diterima';
-                    _loadDokumen();
-                  },
-                ),
-                const SizedBox(width: 8),
-                _FilterChip(
-                  label: 'Ditolak',
-                  aktif: _filterStatus == 'ditolak',
-                  warna: TemaAplikasi.bahaya,
-                  onTap: () {
-                    _filterStatus = 'ditolak';
-                    _loadDokumen();
-                  },
-                ),
-                const SizedBox(width: 8),
-                _FilterChip(
-                  label: 'Selesai',
-                  aktif: _filterStatus == 'selesai',
-                  warna: TemaAplikasi.biruTua,
-                  onTap: () {
-                    _filterStatus = 'selesai';
-                    _loadDokumen();
-                  },
-                ),
-              ],
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _FilterChip(
+                    label: 'Semua',
+                    aktif: _filterStatus.isEmpty,
+                    onTap: () {
+                      _filterStatus = '';
+                      _loadDokumen();
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  _FilterChip(
+                    label: 'Menunggu',
+                    aktif: _filterStatus == 'menunggu',
+                    warna: Colors.orange,
+                    onTap: () {
+                      _filterStatus = 'menunggu';
+                      _loadDokumen();
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  _FilterChip(
+                    label: 'Diterima',
+                    aktif: _filterStatus == 'diterima',
+                    warna: TemaAplikasi.sukses,
+                    onTap: () {
+                      _filterStatus = 'diterima';
+                      _loadDokumen();
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  _FilterChip(
+                    label: 'Ditolak',
+                    aktif: _filterStatus == 'ditolak',
+                    warna: TemaAplikasi.bahaya,
+                    onTap: () {
+                      _filterStatus = 'ditolak';
+                      _loadDokumen();
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  _FilterChip(
+                    label: 'Selesai',
+                    aktif: _filterStatus == 'selesai',
+                    warna: TemaAplikasi.biruTua,
+                    onTap: () {
+                      _filterStatus = 'selesai';
+                      _loadDokumen();
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  _FilterChip(
+                    label: 'Diproses',
+                    aktif: _filterStatus == 'diproses',
+                    warna: Colors.cyan,
+                    onTap: () {
+                      _filterStatus = 'diproses';
+                      _loadDokumen();
+                    },
+                  ),
+                ],
+              ),
             ),
           ),
 
@@ -246,8 +280,11 @@ class _LayarDaftarDokumenAdminState extends State<LayarDaftarDokumenAdmin> {
                         fontWeight: FontWeight.w800,
                         fontSize: 16,
                       ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
+                  const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 10, vertical: 4),
@@ -417,11 +454,15 @@ class _InfoItem extends StatelessWidget {
       children: [
         Icon(icon, size: 14, color: Colors.grey.shade500),
         const SizedBox(width: 4),
-        Text(
-          text,
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.grey.shade600,
+        Flexible(
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.shade600,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
       ],

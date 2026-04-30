@@ -82,15 +82,49 @@ class _LayarPreviewDokumenPengajuanState
     return DateFormat('dd MMMM yyyy', 'id_ID').format(dt);
   }
 
+  /// Menghitung status tampilan berdasarkan data dokumen.
+  /// Jika status backend masih 'menunggu' tapi sudah ada item diproses,
+  /// tampilkan 'selesai' atau 'diproses'.
+  String _computeDisplayStatus() {
+    final rawStatus = _dokumen['status']?.toString().toLowerCase() ?? 'menunggu';
+    if (rawStatus != 'menunggu') return rawStatus;
+
+    // Cek dari item yang sudah diproses
+    final jumlahItem = int.tryParse('${_dokumen['jumlah_item'] ?? 0}') ?? 0;
+
+    // Hitung dari status item individual
+    int jumlahDiterima = 0;
+    int jumlahDitolak = 0;
+
+    for (final item in _items) {
+      final statusItem = item['status']?.toString().toLowerCase() ?? '';
+      if (statusItem == 'diterima') jumlahDiterima++;
+      if (statusItem == 'ditolak') jumlahDitolak++;
+    }
+
+    final totalDiproses = jumlahDiterima + jumlahDitolak;
+
+    if (totalDiproses > 0 && totalDiproses >= jumlahItem && jumlahItem > 0) {
+      return 'selesai';
+    }
+    if (totalDiproses > 0) {
+      return 'diproses';
+    }
+    return rawStatus;
+  }
+
   String _statusLabel(String s) {
     if (s == 'diterima') return 'DITERIMA';
     if (s == 'ditolak') return 'DITOLAK';
+    if (s == 'selesai' || s == 'diproses') return 'SELESAI';
+    if (s == 'diproses') return 'DIPROSES';
     return 'MENUNGGU';
   }
 
   Color _statusColor(String s) {
     if (s == 'diterima') return TemaAplikasi.sukses;
     if (s == 'ditolak') return TemaAplikasi.bahaya;
+    if (s == 'selesai' || s == 'diproses') return TemaAplikasi.biruTua;
     return Colors.orange;
   }
 
@@ -179,7 +213,8 @@ class _LayarPreviewDokumenPengajuanState
   }
 
   Widget _buildDokumen() {
-    final status = _dokumen['status']?.toString() ?? 'menunggu';
+    // Gunakan status yang dihitung untuk menampilkan status yang akurat
+    final status = _computeDisplayStatus();
 
     return Container(
       decoration: BoxDecoration(
@@ -384,6 +419,14 @@ class _LayarPreviewDokumenPengajuanState
                                       fontWeight: FontWeight.w800,
                                       fontSize: 12)),
                             ),
+                            SizedBox(
+                              width: 70,
+                              child: Text('Status',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 12)),
+                            ),
                           ],
                         ),
                       ),
@@ -446,6 +489,13 @@ class _LayarPreviewDokumenPengajuanState
                                     fontWeight: FontWeight.w700,
                                     fontSize: 13,
                                   ),
+                                ),
+                              ),
+                              // Status per item
+                              SizedBox(
+                                width: 70,
+                                child: _buildItemStatusBadge(
+                                  item['status']?.toString() ?? 'menunggu',
                                 ),
                               ),
                             ],
@@ -586,6 +636,41 @@ class _LayarPreviewDokumenPengajuanState
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildItemStatusBadge(String status) {
+    final statusLower = status.toLowerCase();
+    String label;
+    Color color;
+
+    if (statusLower == 'diterima') {
+      label = 'Diterima';
+      color = TemaAplikasi.sukses;
+    } else if (statusLower == 'ditolak') {
+      label = 'Ditolak';
+      color = TemaAplikasi.bahaya;
+    } else {
+      label = 'Menunggu';
+      color = Colors.orange;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Text(
+        label,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.w700,
+          fontSize: 10,
+        ),
       ),
     );
   }

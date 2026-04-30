@@ -236,6 +236,30 @@ class _LayarDashboardKaryawanState extends State<LayarDashboardKaryawan> {
     );
   }
 
+  void _tampilkanPopupPengajuanMenunggu() {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.info_outline, color: TemaAplikasi.emasTua),
+            const SizedBox(width: 8),
+            const Text('Pengajuan Sedang Diproses'),
+          ],
+        ),
+        content: const Text(
+          'Anda masih memiliki pengajuan APD yang menunggu konfirmasi dari admin. Silakan tunggu sampai pengajuan selesai diproses (diterima atau ditolak) sebelum membuat pengajuan baru.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Mengerti'),
+          ),
+        ],
+      ),
+    );
+  }
+
   List<TutorialLangkahAplikasi> get _langkahTutorialKaryawan => [
     TutorialLangkahAplikasi(
       icon: Icons.home_outlined,
@@ -493,6 +517,7 @@ class _LayarDashboardKaryawanState extends State<LayarDashboardKaryawan> {
   @override
   Widget build(BuildContext context) {
     final fotoUrl = buildUploadUrl(_fotoProfil);
+    // Gunakan status_pengajuan (display status) untuk tampilan
     final lastStatus =
         _pengajuanTerakhir?['status_pengajuan']?.toString() ?? '';
     final lastStatusColor = _statusColor(lastStatus);
@@ -1144,13 +1169,26 @@ class _LayarDashboardKaryawanState extends State<LayarDashboardKaryawan> {
   }
 
   Widget _quickActions(BuildContext context) {
+    // Cek apakah ada pengajuan yang masih menunggu konfirmasi
+    // Gunakan status_pengajuan_raw yang dikirim dari API
+    final statusPengajuanTerakhir =
+        _pengajuanTerakhir?['status_pengajuan_raw']?.toString().toLowerCase() ??
+        _pengajuanTerakhir?['status']?.toString().toLowerCase() ?? '';
+    final adaPengajuanMenunggu = statusPengajuanTerakhir == 'menunggu' ||
+        statusPengajuanTerakhir == 'pending';
+
     return Row(
       children: [
         Expanded(
           child: _quickActionButton(
             icon: Icons.assignment_add,
             label: 'Buat\nPengajuan',
+            isDisabled: adaPengajuanMenunggu,
             onTap: () {
+              if (adaPengajuanMenunggu) {
+                _tampilkanPopupPengajuanMenunggu();
+                return;
+              }
               Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -1213,66 +1251,74 @@ class _LayarDashboardKaryawanState extends State<LayarDashboardKaryawan> {
     required String label,
     required VoidCallback onTap,
     int badgeCount = 0,
+    bool isDisabled = false,
   }) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2),
       child: InkWell(
         onTap: onTap,
-        child: Column(
-          children: [
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Container(
-                  width: 58,
-                  height: 58,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(14),
+        child: Opacity(
+          opacity: isDisabled ? 0.5 : 1.0,
+          child: Column(
+            children: [
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Container(
+                    width: 58,
+                    height: 58,
+                    decoration: BoxDecoration(
+                      color: isDisabled ? Colors.grey.shade300 : Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Icon(
+                      icon,
+                      color: isDisabled ? Colors.grey.shade500 : const Color(0xFFD2A92B),
+                      size: 28,
+                    ),
                   ),
-                  child: Icon(icon, color: const Color(0xFFD2A92B), size: 28),
-                ),
-                if (badgeCount > 0)
-                  Positioned(
-                    right: -4,
-                    top: -4,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.red,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: TemaAplikasi.latar, width: 2),
-                      ),
-                      child: Text(
-                        badgeCount > 99 ? '99+' : badgeCount.toString(),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          height: 1,
-                          fontWeight: FontWeight.bold,
+                  if (badgeCount > 0)
+                    Positioned(
+                      right: -4,
+                      top: -4,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: TemaAplikasi.latar, width: 2),
+                        ),
+                        child: Text(
+                          badgeCount > 99 ? '99+' : badgeCount.toString(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            height: 1,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              SizedBox(
+                height: 30,
+                child: Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
                   ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            SizedBox(
-              height: 30,
-              child: Text(
-                label,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
