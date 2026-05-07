@@ -56,7 +56,7 @@ class _LayarRequestIzinState extends State<LayarRequestIzin> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Cek Lagi'),
+              child: const Text('Izinkan semua'),
             ),
             ElevatedButton(
               onPressed: () => Navigator.pop(dialogContext, true),
@@ -247,7 +247,7 @@ class _LayarRequestIzinState extends State<LayarRequestIzin> {
                                     color: TemaAplikasi.emas,
                                   ),
                                 ),
-                                child: const Text('Cek Lagi'),
+                                child: const Text('Izinkan semua'),
                               ),
                             ),
                             const SizedBox(width: 12),

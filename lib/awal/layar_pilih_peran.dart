@@ -1,4 +1,5 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:apdcpp/awal/layar_login_admin.dart';
 import 'package:apdcpp/awal/layar_login_karyawan.dart';
@@ -24,6 +25,85 @@ class _LayarPilihPeranState extends State<LayarPilihPeran> {
   void initState() {
     super.initState();
     _inisialisasiKoneksiServer();
+    _tampilkanNotifikasiBeta();
+  }
+
+  Future<void> _tampilkanNotifikasiBeta() async {
+    final prefs = await SharedPreferences.getInstance();
+    final notifBetaSudahDitampilkan = prefs.getBool('notif_beta_ditampilkan') ?? false;
+
+    if (!notifBetaSudahDitampilkan && mounted) {
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+
+      if (!mounted) return;
+
+      final context = this.context;
+      if (!context.mounted) return;
+
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: TemaAplikasi.emas.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.science_rounded,
+                  color: TemaAplikasi.emasTua,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'Versi Beta',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  color: TemaAplikasi.biruTua,
+                ),
+              ),
+            ],
+          ),
+          content: const Text(
+            'Terima kasih telah mencoba aplikasi ini dalam versi Beta!\n\n'
+            'Aplikasi ini masih dalam tahap pengembangan dan pengujian. '
+            'Kami terus berupaya meningkatkan kualitas dan pengalaman pengguna.\n\n'
+            'Mohon maaf jika terdapat bug atau ketidaksempurnaan. '
+            'Masukan dan saran Anda sangat berharga bagi kami.',
+            style: TextStyle(height: 1.5),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                await prefs.setBool('notif_beta_ditampilkan', true);
+                if (context.mounted) {
+                  Navigator.pop(dialogContext);
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                decoration: BoxDecoration(
+                  color: TemaAplikasi.emas,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Text(
+                  'Mengerti',
+                  style: TextStyle(
+                    color: TemaAplikasi.biruTua,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
   Future<void> _inisialisasiKoneksiServer() async {
@@ -108,6 +188,39 @@ class _LayarPilihPeranState extends State<LayarPilihPeran> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Badge BETA di sudut kiri atas
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: TemaAplikasi.emas.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: TemaAplikasi.emas.withValues(alpha: 0.4),
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.science_rounded,
+                          color: TemaAplikasi.emasTua,
+                          size: 14,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'BETA',
+                          style: TextStyle(
+                            color: TemaAplikasi.emasTua,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 12,
+                            letterSpacing: 1.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   Align(
                     alignment: Alignment.topRight,
                     child: _StatusServerBadge(

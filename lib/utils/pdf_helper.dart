@@ -289,7 +289,7 @@ class PdfHelper {
                                 children: [
                                   pw.Text(item['nama_apd']?.toString() ?? '-', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
                                   if ((item['alasan']?.toString() ?? '').isNotEmpty && !isPenerimaan)
-                                    pw.Text('Alasan: ${item['alasan']}', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+                                    _buildAlasanText(item['alasan']?.toString() ?? ''),
                                 ],
                               ),
                             ),
@@ -457,5 +457,49 @@ class PdfHelper {
     } catch (e) {
       return null;
     }
+  }
+
+  /// Parse dan format alasan dari JSON untuk ditampilkan di PDF
+  static pw.Widget _buildAlasanText(String alasanRaw) {
+    try {
+      // Coba parse sebagai JSON
+      final alasanData = jsonDecode(alasanRaw) as Map<String, dynamic>?;
+      if (alasanData != null) {
+        final jenisAlasan = alasanData['jenis_alasan']?.toString() ?? '';
+        final penjelasan = alasanData['penjelasan']?.toString() ?? '';
+
+        if (jenisAlasan.isNotEmpty || penjelasan.isNotEmpty) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              if (jenisAlasan.isNotEmpty)
+                pw.Text(
+                  'Alasan: $jenisAlasan',
+                  style: pw.TextStyle(fontSize: 8, color: PdfColors.grey700, fontWeight: pw.FontWeight.bold),
+                ),
+              if (penjelasan.isNotEmpty)
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.SizedBox(height: 2),
+                    pw.Text(
+                      penjelasan,
+                      style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+                    ),
+                  ],
+                ),
+            ],
+          );
+        }
+      }
+    } catch (_) {
+      // Jika bukan JSON atau gagal parse, tampilkan sebagai teks biasa
+    }
+
+    // Fallback: tampilkan raw text dengan format yang rapi
+    return pw.Text(
+      alasanRaw,
+      style: pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
+    );
   }
 }

@@ -233,6 +233,7 @@ class _LayarPreviewDokumenPenerimaanState
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       const Text(
                         'PT. CENTRAL PROTEINA PRIMA, Tbk',
@@ -242,6 +243,8 @@ class _LayarPreviewDokumenPenerimaanState
                           color: TemaAplikasi.biruTua,
                           letterSpacing: 0.5,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 6),
                       Row(
@@ -255,13 +258,17 @@ class _LayarPreviewDokumenPenerimaanState
                             ),
                           ),
                           const SizedBox(width: 8),
-                          const Text(
-                            'PENERIMAAN PENGAJUAN APD',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 15,
-                              color: TemaAplikasi.sukses,
-                              letterSpacing: 1.5,
+                          Expanded(
+                            child: const Text(
+                              'PENERIMAAN PENGAJUAN APD',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 15,
+                                color: TemaAplikasi.sukses,
+                                letterSpacing: 0.5,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ],

@@ -677,10 +677,59 @@ class _LayarPersetujuanApdAdminState extends State<LayarPersetujuanApdAdmin> {
                           ],
                         ),
                       ),
+                      // Tanggal Pengajuan - lebih menonjol
                       if (tanggal != null)
-                        _DetailRow(
-                          label: 'Tanggal',
-                          value: _dateFormat.format(tanggal),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SizedBox(
+                                width: 92,
+                                child: Text(
+                                  'Tanggal',
+                                  style: const TextStyle(
+                                    color: TemaAplikasi.netral,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: TemaAplikasi.biruMuda.withValues(alpha: 0.2),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: TemaAplikasi.biruTua.withValues(alpha: 0.2),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.calendar_today_outlined,
+                                        size: 14,
+                                        color: TemaAplikasi.biruTua,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        _dateFormat.format(tanggal),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 13,
+                                          color: TemaAplikasi.biruTua,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                     ],
                   ),
@@ -1106,6 +1155,12 @@ class _LayarPersetujuanApdAdminState extends State<LayarPersetujuanApdAdmin> {
                             spacing: 8,
                             runSpacing: 8,
                             children: [
+                              if (tanggal != null)
+                                _DetailChip(
+                                  warna: TemaAplikasi.biruTua,
+                                  label: _dateFormat.format(tanggal),
+                                  icon: Icons.calendar_today_outlined,
+                                ),
                               _DetailChip(
                                 warna: Colors.blue,
                                 label: '${item['jabatan'] ?? '-'}',
@@ -1116,16 +1171,6 @@ class _LayarPersetujuanApdAdminState extends State<LayarPersetujuanApdAdmin> {
                               ),
                             ],
                           ),
-                          if (tanggal != null) ...[
-                            const SizedBox(height: 10),
-                            Text(
-                              _dateFormat.format(tanggal),
-                              style: const TextStyle(
-                                color: TemaAplikasi.netral,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
                         ],
                       ),
                     ),
@@ -1209,8 +1254,9 @@ class _DetailRow extends StatelessWidget {
 class _DetailChip extends StatelessWidget {
   final Color warna;
   final String label;
+  final IconData? icon;
 
-  const _DetailChip({required this.warna, required this.label});
+  const _DetailChip({required this.warna, required this.label, this.icon});
 
   @override
   Widget build(BuildContext context) {
@@ -1220,13 +1266,22 @@ class _DetailChip extends StatelessWidget {
         color: warna.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(999),
       ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: warna,
-          fontWeight: FontWeight.w700,
-          fontSize: 12,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 14, color: warna),
+            const SizedBox(width: 4),
+          ],
+          Text(
+            label,
+            style: TextStyle(
+              color: warna,
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1285,15 +1340,37 @@ class _DetailDokumenSheetState extends State<_DetailDokumenSheet> {
               .toList() ??
           [];
 
+      // Debug: Cek apakah items memiliki tanggal_pengajuan
+      if (items.isNotEmpty) {
+        final firstItem = items.first;
+        print('DEBUG: First item keys: ${firstItem.keys.toList()}');
+        print('DEBUG: First item tanggal_pengajuan: ${firstItem['tanggal_pengajuan']}');
+        print('DEBUG: Dokumen tanggal_pengajuan: ${data['dokumen']['tanggal_pengajuan']}');
+      }
+
       setState(() {
-        _dokumen = Map<String, dynamic>.from(data);
+        // Perbaikan: Ambil dokumen dari data['dokumen'], bukan dari data langsung
+        final dokumenData = data['dokumen'] as Map<String, dynamic>?;
+        _dokumen = dokumenData != null
+            ? Map<String, dynamic>.from(dokumenData)
+            : Map<String, dynamic>.from(data);
+
+        // Hapus keys yang tidak perlu (jika ada)
         _dokumen.remove('karyawan');
         _dokumen.remove('items');
+
         _karyawan = (data['karyawan'] as Map?)
                 ?.map((k, v) => MapEntry('$k', v)) ??
             {};
         _items = items;
         _loading = false;
+
+        // Debug log
+        print('DEBUG UI: data keys: ${data.keys.toList()}');
+        print('DEBUG UI: data[dokumen] keys: ${dokumenData?.keys.toList()}');
+        print('DEBUG UI: _dokumen keys: ${_dokumen.keys.toList()}');
+        print('DEBUG UI: _dokumen tanggal_pengajuan: ${_dokumen['tanggal_pengajuan']}');
+        print('DEBUG UI: _formatTanggal result: ${_formatTanggal(_dokumen['tanggal_pengajuan']?.toString())}');
 
         // Inisialisasi status item dari data
         for (final item in items) {
@@ -1325,20 +1402,44 @@ class _DetailDokumenSheetState extends State<_DetailDokumenSheet> {
     });
   }
 
+  /// Cek apakah semua item sudah dipilih (diterima atau ditolak)
+  bool get _allItemSelected {
+    return _statusItem.values.every((status) =>
+        status == 'diterima' || status == 'ditolak');
+  }
+
   Future<void> _lanjutkanProses() async {
     if (_prosesLoading) return;
 
     // Hitung item yang dipilih
     final itemsDiterima = <String>[];
     final itemsDitolak = <String>[];
+    final itemsMenunggu = <String>[];
 
     _statusItem.forEach((id, status) {
       if (status == 'diterima') {
         itemsDiterima.add(id);
       } else if (status == 'ditolak') {
         itemsDitolak.add(id);
+      } else {
+        itemsMenunggu.add(id);
       }
     });
+
+    // Validasi: Semua item harus dipilih (diterima atau ditolak)
+    if (itemsMenunggu.isNotEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Masih ada ${itemsMenunggu.length} item yang belum dipilih. Silakan pilih semua item terlebih dahulu.',
+          ),
+          backgroundColor: Colors.orange,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
 
     if (itemsDiterima.isEmpty && itemsDitolak.isEmpty) {
       if (!mounted) return;
@@ -1644,6 +1745,57 @@ class _DetailDokumenSheetState extends State<_DetailDokumenSheet> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          // Info Tanggal Pengajuan - lebih menonjol
+                          _InfoSection(
+                            title: 'Tanggal Pengajuan',
+                            child: Column(
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: TemaAplikasi.biruMuda.withValues(alpha: 0.3),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: const Icon(
+                                        Icons.calendar_today_outlined,
+                                        color: TemaAplikasi.biruTua,
+                                        size: 20,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            'Waktu Pengajuan',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: Colors.grey,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            _formatTanggal(_dokumen['tanggal_pengajuan']?.toString()),
+                                            style: const TextStyle(
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w800,
+                                              color: TemaAplikasi.biruTua,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
                           // Info Karyawan
                           _InfoSection(
                             title: 'Informasi Karyawan',
@@ -1654,21 +1806,28 @@ class _DetailDokumenSheetState extends State<_DetailDokumenSheet> {
                                 _InfoRow('Jabatan', _karyawan['jabatan'] ?? '-'),
                                 _InfoRow(
                                     'Departemen', _karyawan['departemen'] ?? '-'),
-                                _InfoRow('Tanggal',
-                                    _formatTanggal(_dokumen['tanggal_pengajuan']?.toString())),
                               ],
                             ),
                           ),
                           const SizedBox(height: 16),
 
                           // Daftar Item dengan Checkbox
-                          const Text(
-                            'Pilih Item untuk Disetujui/Ditolak',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 15,
-                              color: TemaAplikasi.biruTua,
-                            ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                'Pilih Item untuk Disetujui/Ditolak',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 15,
+                                  color: TemaAplikasi.biruTua,
+                                ),
+                              ),
+                              _StatusIndicatorChip(
+                                totalItems: _items.length,
+                                itemsSelected: _statusItem.values.where((s) => s != 'menunggu').length,
+                              ),
+                            ],
                           ),
                           const SizedBox(height: 12),
                           const Text(
@@ -1729,7 +1888,7 @@ class _DetailDokumenSheetState extends State<_DetailDokumenSheet> {
                   Expanded(
                     flex: 2,
                     child: ElevatedButton.icon(
-                      onPressed: _prosesLoading ? null : _lanjutkanProses,
+                      onPressed: (_prosesLoading || !_allItemSelected) ? null : _lanjutkanProses,
                       icon: _prosesLoading
                           ? const SizedBox(
                               width: 18,
@@ -1739,10 +1898,20 @@ class _DetailDokumenSheetState extends State<_DetailDokumenSheet> {
                                 color: Colors.white,
                               ),
                             )
-                          : const Icon(Icons.arrow_forward),
-                      label: Text(_prosesLoading ? 'Memproses...' : 'Lanjutkan'),
+                          : Icon(
+                              _allItemSelected ? Icons.arrow_forward : Icons.warning_amber_rounded,
+                            ),
+                      label: Text(
+                        _prosesLoading
+                            ? 'Memproses...'
+                            : _allItemSelected
+                                ? 'Lanjutkan'
+                                : 'Pilih Semua Item',
+                      ),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: TemaAplikasi.biruTua,
+                        backgroundColor: _allItemSelected
+                            ? TemaAplikasi.biruTua
+                            : Colors.grey,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
@@ -1946,6 +2115,58 @@ class _ItemPilihCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+
+class _StatusIndicatorChip extends StatelessWidget {
+  final int totalItems;
+  final int itemsSelected;
+
+  const _StatusIndicatorChip({
+    required this.totalItems,
+    required this.itemsSelected,
+  });
+
+  bool get isAllSelected => itemsSelected == totalItems;
+  Color get bgColor {
+    if (isAllSelected) return TemaAplikasi.sukses;
+    if (itemsSelected == 0) return Colors.grey;
+    return Colors.orange;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: bgColor.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: bgColor.withValues(alpha: 0.4),
+          width: 1.5,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isAllSelected ? Icons.check_circle : Icons.pending,
+            size: 14,
+            color: bgColor,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            '$itemsSelected/$totalItems dipilih',
+            style: TextStyle(
+              color: bgColor,
+              fontWeight: FontWeight.w700,
+              fontSize: 11,
+            ),
+          ),
+        ],
       ),
     );
   }
