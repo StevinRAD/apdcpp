@@ -191,56 +191,70 @@ class _LayarLaporKendalaKaryawanState extends State<LayarLaporKendalaKaryawan>
 
     if (!_formKey.currentState!.validate()) return;
 
-    // Jika pilih dari pengajuan, gunakan nama APD dari pengajuan tsb
-    String namaApd = _namaApdCtrl.text.trim();
-    final p = _daftarPengajuan.firstWhere(
-      (e) => e['id_pengajuan']?.toString() == _selectedIdPengajuan,
-      orElse: () => {},
-    );
-    if (p.isEmpty) {
+    try {
+      // Jika pilih dari pengajuan, gunakan nama APD dari pengajuan tsb
+      String namaApd = _namaApdCtrl.text.trim();
+      final pIndex = _daftarPengajuan.indexWhere(
+        (e) => e['id_pengajuan']?.toString() == _selectedIdPengajuan,
+      );
+      if (pIndex < 0) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Data pengajuan tidak valid. Coba muat ulang halaman'),
+            ),
+          );
+        }
+        return;
+      }
+      final p = _daftarPengajuan[pIndex];
+      namaApd = '${p['nama_apd'] ?? namaApd}';
+      if (_namaApdCtrl.text.trim().isEmpty && namaApd.isNotEmpty) {
+        _namaApdCtrl.text = namaApd;
+      }
+
+      setState(() => _submitting = true);
+      final res = await _api.kirimLaporanKendala(
+        username: widget.username,
+        namaApd: namaApd,
+        keterangan: _keteranganCtrl.text.trim(),
+        idPengajuan: _selectedIdPengajuan,
+        fotoLaporan: _fotoLaporan,
+      );
+      if (!mounted) return;
+      setState(() => _submitting = false);
+
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Data pengajuan tidak valid. Coba muat ulang halaman'),
+        SnackBar(
+          content: Text(_api.message(res)),
+          backgroundColor: _api.isSuccess(res)
+              ? TemaAplikasi.sukses
+              : TemaAplikasi.bahaya,
         ),
       );
-      return;
-    }
-    namaApd = '${p['nama_apd'] ?? namaApd}';
-    if (_namaApdCtrl.text.trim().isEmpty && namaApd.isNotEmpty) {
-      _namaApdCtrl.text = namaApd;
-    }
 
-    setState(() => _submitting = true);
-    final res = await _api.kirimLaporanKendala(
-      username: widget.username,
-      namaApd: namaApd,
-      keterangan: _keteranganCtrl.text.trim(),
-      idPengajuan: _selectedIdPengajuan,
-      fotoLaporan: _fotoLaporan,
-    );
-    if (!mounted) return;
-    setState(() => _submitting = false);
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(_api.message(res)),
-        backgroundColor: _api.isSuccess(res)
-            ? TemaAplikasi.sukses
-            : TemaAplikasi.bahaya,
-      ),
-    );
-
-    if (_api.isSuccess(res)) {
-      _formKey.currentState!.reset();
-      _namaApdCtrl.clear();
-      _keteranganCtrl.clear();
-      setState(() {
-        _fotoLaporan = null;
-        _selectedIdPengajuan = null;
-      });
-      // Tab Riwayat
-      _tabController.animateTo(1);
-      await _loadRiwayat();
+      if (_api.isSuccess(res)) {
+        _formKey.currentState!.reset();
+        _namaApdCtrl.clear();
+        _keteranganCtrl.clear();
+        setState(() {
+          _fotoLaporan = null;
+          _selectedIdPengajuan = null;
+        });
+        // Tab Riwayat
+        _tabController.animateTo(1);
+        await _loadRiwayat();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _submitting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Terjadi kesalahan: $e'),
+            backgroundColor: TemaAplikasi.bahaya,
+          ),
+        );
+      }
     }
   }
 
@@ -350,7 +364,7 @@ class _LayarLaporKendalaKaryawanState extends State<LayarLaporKendalaKaryawan>
             _loadingPengajuan
                 ? const LinearProgressIndicator()
                 : DropdownButtonFormField<String>(
-                    value: _selectedIdPengajuan,
+                    initialValue: _selectedIdPengajuan,
                     isExpanded: true,
                     decoration: const InputDecoration(
                       labelText: 'Pilih Pengajuan APD',
@@ -374,12 +388,11 @@ class _LayarLaporKendalaKaryawanState extends State<LayarLaporKendalaKaryawan>
                       setState(() {
                         _selectedIdPengajuan = val;
                         if (val != null && val.isNotEmpty) {
-                          final p = _daftarPengajuan.firstWhere(
+                          final pIndex = _daftarPengajuan.indexWhere(
                             (e) => e['id_pengajuan']?.toString() == val,
-                            orElse: () => {},
                           );
-                          if (p.isNotEmpty) {
-                            _namaApdCtrl.text = p['nama_apd']?.toString() ?? '';
+                          if (pIndex >= 0) {
+                            _namaApdCtrl.text = _daftarPengajuan[pIndex]['nama_apd']?.toString() ?? '';
                           }
                         } else {
                           _namaApdCtrl.clear();

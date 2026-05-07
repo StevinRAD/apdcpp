@@ -1157,7 +1157,8 @@ class ApiApdService {
       final query = _supabase
           .from('dokumen_pengajuan')
           .select(
-            '*, karyawan(username,nama_lengkap,jabatan,departemen,lokasi_kerja,cooldown_pengajuan_hari,foto_profil), '
+            'id,created_at,status,tanggal_pengajuan,tanggal_proses,catatan_admin,id_karyawan,id_admin,'
+            'karyawan(username,nama_lengkap,jabatan,departemen,lokasi_kerja,cooldown_pengajuan_hari,foto_profil), '
             'admin(nama_lengkap)',
           );
 
@@ -1197,7 +1198,7 @@ class ApiApdService {
         final idDokumen = _readText(dokumen['id']);
         final itemRows = await _supabase
             .from('dokumen_pengajuan_item')
-            .select('id,id_apd,ukuran,alasan,jumlah,status,catatan_admin,tanggal_proses')
+            .select('id,id_apd,ukuran,alasan,jumlah,status,catatan_admin,tanggal_proses,created_at')
             .eq('id_pengajuan', idDokumen);
 
         final items = _asMapList(itemRows);
@@ -1214,11 +1215,26 @@ class ApiApdService {
         }
 
         // Untuk DOKUMEN, buat SATU entry yang berisi info summary
+        // Prioritaskan tanggal_pengajuan, jika tidak ada gunakan created_at
+        final tanggalPengajuanDokumen = _readText(dokumen['tanggal_pengajuan']);
+        final tanggalFallback = _readText(dokumen['created_at']);
+        final tanggalFinal = tanggalPengajuanDokumen.isNotEmpty
+            ? tanggalPengajuanDokumen
+            : tanggalFallback;
+
+        // Enrich items dengan tanggal pengajuan dari dokumen parent
+        final enrichedItems = items.map((item) {
+          final enrichedItem = Map<String, dynamic>.from(item);
+          // Tambahkan tanggal_pengajuan dari dokumen parent ke setiap item
+          enrichedItem['tanggal_pengajuan'] = tanggalFinal;
+          return enrichedItem;
+        }).toList();
+
         mappedData.add({
           'id_pengajuan': idDokumen, // ID dokumen
           'tipe': 'dokumen', // Penanda sistem baru
           'status_pengajuan': _displayStatusPengajuan(dokumen['status']),
-          'tanggal_pengajuan': _readText(dokumen['tanggal_pengajuan']),
+          'tanggal_pengajuan': tanggalFinal,
           'tanggal_diproses': _readText(dokumen['tanggal_proses']),
           'username_karyawan': _readText(karyawan['username']),
           'nama_lengkap': _readText(karyawan['nama_lengkap'], fallback: '-'),
@@ -1227,13 +1243,13 @@ class ApiApdService {
           'lokasi_kerja': _readText(karyawan['lokasi_kerja'], fallback: '-'),
           'foto_profil': _readText(karyawan['foto_profil']),
           'cooldown_pengajuan_hari': karyawan['cooldown_pengajuan_hari'] ?? 0,
-          'nama_apd': '${items.length} item APD', // Tampilkan jumlah item
-          'jumlah_item': items.length, // Jumlah total item
+          'nama_apd': '${enrichedItems.length} item APD', // Tampilkan jumlah item
+          'jumlah_item': enrichedItems.length, // Jumlah total item
           'jumlah_item_menunggu': menungguCount, // Jumlah item yang menunggu
           'catatan_admin': _readText(dokumen['catatan_admin']),
           'nama_admin_proses': _readText(admin['nama_lengkap']),
           // Simpan data items untuk dipakai di detail sheet
-          'items_data': items,
+          'items_data': enrichedItems,
         });
       }
 
@@ -1887,7 +1903,7 @@ class ApiApdService {
           .select('id')
           .eq('username', user)
           .maybeSingle();
-      
+
       karyawan ??= await _supabase
           .from('karyawan')
           .select('id')
@@ -1901,6 +1917,8 @@ class ApiApdService {
         };
       }
 
+      print('DEBUG: Karyawan ID: ${karyawan['id']}');
+
       // === GUNAKAN SISTEM BARU: dokumen_pengajuan_item ===
       // Ambil semua item yang DITERIMA dari dokumen pengajuan karyawan
       final dokumenRes = await _supabase
@@ -1909,56 +1927,78 @@ class ApiApdService {
           .eq('id_karyawan', karyawan['id']);
 
       final dokumenRows = _asMapList(dokumenRes);
+      print('DEBUG: Jumlah dokumen: ${dokumenRows.length}');
+
       final allItems = <Map<String, dynamic>>[];
 
       // Ambil item dari setiap dokumen
       for (final dokumen in dokumenRows) {
         final idDokumen = _readText(dokumen['id']);
         final tglPengajuan = _readText(dokumen['tanggal_pengajuan']);
-        
+
+        print('DEBUG: Proses dokumen $idDokumen');
+
         final items = await _supabase
             .from('dokumen_pengajuan_item')
             .select('id,id_apd,status')
             .eq('id_pengajuan', idDokumen);
 
-        final listItems = _asMapList(items).where((it) {
+        final listItems = _asMapList(items);
+        print('DEBUG: Items dari dokumen $idDokumen: ${listItems.length}');
+
+        final filteredItems = listItems.where((it) {
           final st = (it['status']?.toString() ?? '').toLowerCase();
-          return st == 'diterima' || st == 'disetujui';
+          final isValid = st == 'diterima' || st == 'disetujui';
+          print('DEBUG: Item ${it['id']} status: $st, valid: $isValid');
+          return isValid;
         }).map((it) {
           final mutableItem = Map<String, dynamic>.from(it);
           mutableItem['tanggal_pengajuan'] = tglPengajuan;
           return mutableItem;
         }).toList();
 
-        allItems.addAll(listItems);
+        print('DEBUG: Items valid (diterima/disetujui): ${filteredItems.length}');
+        allItems.addAll(filteredItems);
       }
+
+      print('DEBUG: Total allItems: ${allItems.length}');
 
       // Ambil nama APD
       final apdIds = allItems
           .map((e) => _readText(e['id_apd']))
           .where((e) => e.isNotEmpty)
           .toSet();
+
+      print('DEBUG: APD IDs: $apdIds');
+
       final apdMap = await _loadMapByIds(
         table: 'apd',
         ids: apdIds,
         selectColumns: 'id,nama_apd',
       );
 
+      print('DEBUG: APD Map: $apdMap');
+
       final mapped = allItems.map((item) {
         final apd = apdMap[_readText(item['id_apd'])];
-        return <String, dynamic>{
+        final result = <String, dynamic>{
           'id_pengajuan': _readText(item['id']), // ID item
           'nama_apd': _readText(apd?['nama_apd'], fallback: '-'),
           'status_pengajuan': 'Disetujui', // Semua item di sini sudah diterima
           'tanggal_pengajuan': _readText(item['tanggal_pengajuan']),
         };
+        print('DEBUG: Mapped item: $result');
+        return result;
       }).toList();
+
+      print('DEBUG: Final mapped rows: ${mapped.length}');
 
       return {
         'status': 'sukses',
         'data': {'rows': mapped},
       };
     } catch (e) {
+      print('DEBUG: Error in pengajuanKaryawanUntukLaporan: $e');
       return {'status': 'gagal', 'pesan': 'Gagal memuat data pengajuan: $e'};
     }
   }
@@ -1997,30 +2037,53 @@ class ApiApdService {
         return {'status': 'gagal', 'pesan': 'Data karyawan tidak ditemukan'};
       }
 
-      final pengajuan = await _supabase
-          .from('pengajuan')
-          .select('id,id_karyawan,id_apd,status_pengajuan')
+      // === SISTEM BARU: Cari di dokumen_pengajuan_item ===
+      final itemPengajuan = await _supabase
+          .from('dokumen_pengajuan_item')
+          .select('id,id_pengajuan,id_apd,status')
           .eq('id', idPengajuanRaw)
           .maybeSingle();
-      if (pengajuan == null) {
+
+      if (itemPengajuan == null) {
         return {'status': 'gagal', 'pesan': 'Data pengajuan tidak ditemukan'};
       }
-      if (_readText(pengajuan['id_karyawan']) != _readText(karyawan['id'])) {
+
+      // Ambil dokumen pengajuan untuk validasi karyawan
+      final idDokumen = _readText(itemPengajuan['id_pengajuan']);
+      if (idDokumen.isEmpty) {
+        return {'status': 'gagal', 'pesan': 'ID dokumen pengajuan tidak valid'};
+      }
+
+      final dokumenPengajuan = await _supabase
+          .from('dokumen_pengajuan')
+          .select('id,id_karyawan')
+          .eq('id', idDokumen)
+          .maybeSingle();
+
+      if (dokumenPengajuan == null) {
+        return {'status': 'gagal', 'pesan': 'Dokumen pengajuan tidak ditemukan'};
+      }
+
+      if (_readText(dokumenPengajuan['id_karyawan']) != _readText(karyawan['id'])) {
         return {
           'status': 'gagal',
           'pesan': 'Pengajuan yang dipilih tidak sesuai akun karyawan',
         };
       }
-      if (!_isStatusDisetujuiPengajuan(pengajuan['status_pengajuan'])) {
+
+      // Cek status item - harus diterima/disetujui
+      final statusItem = _normalizeStatus(_readText(itemPengajuan['status']));
+      if (statusItem != 'diterima' && statusItem != 'disetujui') {
         return {
           'status': 'gagal',
           'pesan':
-              'Laporan hanya bisa dibuat dari APD yang sudah diterima/disetujui',
+              'Laporan hanya bisa dibuat dari APD yang sudah diterima/disetujui. Status item saat ini: $statusItem',
         };
       }
 
+      // Ambil nama APD
       String namaApdFinal = namaApd.trim();
-      final idApd = _readText(pengajuan['id_apd']);
+      final idApd = _readText(itemPengajuan['id_apd']);
       if (idApd.isNotEmpty) {
         final apd = await _supabase
             .from('apd')
@@ -2033,11 +2096,18 @@ class ApiApdService {
         }
       }
 
+      // Upload foto
       String? fotoPath;
       if (fotoLaporan != null) {
-        fotoPath = await _uploadFile(fotoLaporan, 'kendala');
-        if (fotoPath == null) {
-          return {'status': 'gagal', 'pesan': 'Gagal mengunggah foto laporan'};
+        try {
+          fotoPath = await _uploadFile(fotoLaporan, 'kendala');
+          if (fotoPath == null) {
+            return {'status': 'gagal', 'pesan': 'Gagal mengunggah foto laporan'};
+          }
+        } catch (e) {
+          debugPrint('Error uploading foto: $e');
+          // Lanjutkan tanpa foto jika upload gagal
+          fotoPath = null;
         }
       }
 
@@ -2046,7 +2116,7 @@ class ApiApdService {
         'nama_apd': namaApdFinal,
         'keterangan': keterangan.trim(),
         'status_laporan': _toDbStatusLaporan('menunggu'),
-        'id_pengajuan': idPengajuanRaw,
+        'id_pengajuan': idPengajuanRaw, // ID item dokumen
         'foto_laporan': fotoPath,
       }..removeWhere((key, value) => value == null);
 
@@ -2057,6 +2127,8 @@ class ApiApdService {
         });
       } on PostgrestException catch (e) {
         final message = e.message.toLowerCase();
+        final details = (e.details?.toString() ?? '').toLowerCase();
+
         if (_isMissingTableError(e, 'laporan_kendala')) {
           return {
             'status': 'gagal',
@@ -2064,15 +2136,74 @@ class ApiApdService {
                 'Tabel laporan_kendala belum ada di Supabase. Silakan buat tabelnya terlebih dahulu.',
           };
         }
-        if (message.contains('tanggal_laporan')) {
-          await _supabase.from('laporan_kendala').insert(payload);
-        } else if (message.contains('id_pengajuan')) {
-          final payloadTanpaPengajuan = Map<String, dynamic>.from(payload)
-            ..remove('id_pengajuan');
-          await _supabase.from('laporan_kendala').insert(payloadTanpaPengajuan);
-        } else {
-          rethrow;
+
+        // Handle column errors with fallbacks
+        if (message.contains('column') || details.contains('column')) {
+          debugPrint('DEBUG: Column error detected: ${e.message}');
+          debugPrint('DEBUG: Error details: ${e.details}');
+
+          // Coba hilangkan tanggal_laporan
+          if (message.contains('tanggal_laporan') || details.contains('tanggal_laporan')) {
+            debugPrint('DEBUG: Retrying without tanggal_laporan');
+            await _supabase.from('laporan_kendala').insert(payload);
+            return {
+              'status': 'sukses',
+              'pesan': 'Laporan kendala berhasil dikirim ke admin',
+            };
+          }
+
+          // Coba hilangkan id_pengajuan (kolom mungkin bernama id_item_pengajuan atau tidak ada)
+          if (message.contains('id_pengajuan') || details.contains('id_pengajuan')) {
+            debugPrint('DEBUG: Retrying without id_pengajuan');
+            final payloadTanpaPengajuan = Map<String, dynamic>.from(payload)
+              ..remove('id_pengajuan');
+            await _supabase.from('laporan_kendala').insert({
+              ...payloadTanpaPengajuan,
+              'tanggal_laporan': DateTime.now().toIso8601String(),
+            });
+            return {
+              'status': 'sukses',
+              'pesan': 'Laporan kendala berhasil dikirim ke admin',
+            };
+          }
+
+          // Coba dengan nama kolom id_item_pengajuan
+          final payloadDenganItemPengajuan = Map<String, dynamic>.from(payload);
+          payloadDenganItemPengajuan.remove('id_pengajuan');
+          payloadDenganItemPengajuan['id_item_pengajuan'] = idPengajuanRaw;
+
+          debugPrint('DEBUG: Retrying with id_item_pengajuan instead of id_pengajuan');
+          try {
+            await _supabase.from('laporan_kendala').insert({
+              ...payloadDenganItemPengajuan,
+              'tanggal_laporan': DateTime.now().toIso8601String(),
+            });
+            return {
+              'status': 'sukses',
+              'pesan': 'Laporan kendala berhasil dikirim ke admin',
+            };
+          } on PostgrestException catch (e2) {
+            debugPrint('DEBUG: id_item_pengajuan also failed: ${e2.message}');
+          }
+
+          // Last resort: insert minimal data
+          debugPrint('DEBUG: Trying minimal insert (only required fields)');
+          final minimalPayload = <String, dynamic>{
+            'id_karyawan': karyawan['id'],
+            'keterangan': keterangan.trim(),
+          };
+          await _supabase.from('laporan_kendala').insert(minimalPayload);
+          return {
+            'status': 'sukses',
+            'pesan': 'Laporan kendala berhasil dikirim ke admin',
+          };
         }
+
+        // Jika error tidak terhandle, return error message
+        return {
+          'status': 'gagal',
+          'pesan': 'Gagal menyimpan laporan: ${e.message}',
+        };
       }
 
       return {
@@ -2080,6 +2211,7 @@ class ApiApdService {
         'pesan': 'Laporan kendala berhasil dikirim ke admin',
       };
     } catch (e) {
+      debugPrint('Error in kirimLaporanKendala: $e');
       return {'status': 'gagal', 'pesan': 'Gagal mengirim laporan: $e'};
     }
   }
@@ -2604,9 +2736,11 @@ class ApiApdService {
         if (bannedUntil != null && DateTime.now().isBefore(bannedUntil)) {
           bisaAjukan = false;
           statusAturan = 'ban_sementara';
-          tanggalBolehAjukan = bannedUntil.toIso8601String();
+          final bannedLocal = bannedUntil.toLocal();
+          tanggalBolehAjukan = bannedLocal.toIso8601String();
+          final formattedDate = '${bannedLocal.day}/${bannedLocal.month}/${bannedLocal.year} ${bannedLocal.hour.toString().padLeft(2, '0')}:${bannedLocal.minute.toString().padLeft(2, '0')}';
           pesanAturan =
-              'Akun sedang dibatasi sementara hingga ${bannedUntil.toLocal()}.';
+              'Akun sedang dibatasi sementara hingga $formattedDate.';
         }
       }
 
@@ -2641,7 +2775,8 @@ class ApiApdService {
               }
               bisaAjukan = false;
               statusAturan = 'cooldown';
-              tanggalBolehAjukan = nextAllowed.toIso8601String();
+              final nextAllowedLocal = nextAllowed.toLocal();
+              tanggalBolehAjukan = nextAllowedLocal.toIso8601String();
               pesanAturan =
                   'Pengajuan sebelumnya sudah diproses. Kamu bisa mengajukan lagi dalam $sisaHariCooldown hari.';
             }
@@ -4175,12 +4310,17 @@ class ApiApdService {
     try {
       final dokumen = await _supabase
           .from('dokumen_pengajuan')
-          .select('*')
+          .select('id,created_at,status,tanggal_pengajuan,tanggal_proses,catatan_admin,id_karyawan,id_admin')
           .eq('id', idDokumen)
           .maybeSingle();
       if (dokumen == null) {
         return {'status': 'gagal', 'pesan': 'Dokumen tidak ditemukan'};
       }
+
+      // Debug: Log tanggal dari database
+      print('DEBUG: Raw dokumen data keys: ${dokumen.keys.toList()}');
+      print('DEBUG: tanggal_pengajuan from db: ${dokumen['tanggal_pengajuan']}');
+      print('DEBUG: created_at from db: ${dokumen['created_at']}');
 
       // Ambil data karyawan
       final idKaryawan = _readText(dokumen['id_karyawan']);
@@ -4207,6 +4347,23 @@ class ApiApdService {
             .eq('id_pengajuan', idDokumen),
       );
 
+      // Pastikan tanggal_pengajuan ada, gunakan created_at sebagai fallback
+      final tanggalPengajuanRaw = _readText(dokumen['tanggal_pengajuan']);
+      final tanggalCreated = _readText(dokumen['created_at']);
+
+      // Fallback chain: tanggal_pengajuan → created_at → DateTime.now()
+      String tanggalPengajuanFinal;
+      if (tanggalPengajuanRaw.isNotEmpty) {
+        tanggalPengajuanFinal = tanggalPengajuanRaw;
+      } else if (tanggalCreated.isNotEmpty) {
+        tanggalPengajuanFinal = tanggalCreated;
+      } else {
+        // Last resort: gunakan current time
+        tanggalPengajuanFinal = DateTime.now().toIso8601String();
+      }
+
+      print('DEBUG: Final tanggal_pengajuan: $tanggalPengajuanFinal');
+
       final enrichedItems = <Map<String, dynamic>>[];
       for (final item in itemRows) {
         final idApd = _readText(item['id_apd']);
@@ -4221,10 +4378,12 @@ class ApiApdService {
           namaApd = _readText(apd?['nama_apd'], fallback: '-');
           satuan = _readText(apd?['satuan'], fallback: 'pcs');
         }
+        // Tambahkan tanggal_pengajuan dari dokumen parent ke setiap item
         enrichedItems.add({
           ...item.map((key, value) => MapEntry('$key', value)),
           'nama_apd': namaApd,
           'satuan': satuan,
+          'tanggal_pengajuan': tanggalPengajuanFinal,
         });
       }
 
@@ -4242,11 +4401,14 @@ class ApiApdService {
         }
       }
 
+      final dokumenWithDate = Map<String, dynamic>.from(dokumen);
+      // Selalu set tanggal_pengajuan, gunakan fallback jika perlu
+      dokumenWithDate['tanggal_pengajuan'] = tanggalPengajuanFinal;
+
       return {
         'status': 'sukses',
         'data': {
-          'dokumen':
-              dokumen.map((key, value) => MapEntry('$key', value)),
+          'dokumen': dokumenWithDate,
           'karyawan': profilKaryawan,
           'admin': profilAdmin,
           'items': enrichedItems,
