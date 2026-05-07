@@ -6,6 +6,7 @@ import 'package:apdcpp/awal/layar_pilih_peran.dart';
 import 'package:apdcpp/services/apd_api_service.dart';
 import 'package:apdcpp/services/sesi_aplikasi_service.dart';
 import 'package:apdcpp/services/single_device_session_service.dart';
+import 'package:apdcpp/services/realtime_notifikasi_service.dart';
 import 'package:apdcpp/tema_aplikasi.dart';
 import 'package:apdcpp/utils/navigasi_kembali.dart';
 
@@ -79,6 +80,9 @@ class _LayarLoginAdminState extends State<LayarLoginAdmin> {
 
         // Penting: Tandai sesi valid di perangkat ini
         await SingleDeviceSessionService.simpanDeviceIdSesi(deviceId);
+
+        // Mulai listen notifikasi realtime
+        await RealtimeNotifikasiService.instance.mulaiListenAdmin(username);
 
         if (!mounted) return;
         setState(() => _sedangLoading = false);

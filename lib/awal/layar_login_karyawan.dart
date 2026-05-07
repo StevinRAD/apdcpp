@@ -6,6 +6,7 @@ import 'package:apdcpp/karyawan/layar_hubungi_admin.dart';
 import 'package:apdcpp/services/apd_api_service.dart';
 import 'package:apdcpp/services/sesi_aplikasi_service.dart';
 import 'package:apdcpp/services/single_device_session_service.dart';
+import 'package:apdcpp/services/realtime_notifikasi_service.dart';
 import 'package:apdcpp/tema_aplikasi.dart';
 import 'package:apdcpp/utils/navigasi_kembali.dart';
 
@@ -82,6 +83,9 @@ class _LayarLoginKaryawanState extends State<LayarLoginKaryawan> {
 
         // Penting: Tandai sesi valid di perangkat ini
         await SingleDeviceSessionService.simpanDeviceIdSesi(deviceId);
+
+        // Mulai listen notifikasi realtime
+        await RealtimeNotifikasiService.instance.mulaiListenKaryawan(username);
 
         if (!mounted) return;
         setState(() => _sedangLoading = false);
