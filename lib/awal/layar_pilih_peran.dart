@@ -6,6 +6,7 @@ import 'package:apdcpp/awal/layar_login_karyawan.dart';
 import 'package:apdcpp/services/apd_api_service.dart';
 import 'package:apdcpp/tema_aplikasi.dart';
 import 'package:apdcpp/widgets/dialog_koneksi_internet.dart';
+import 'package:apdcpp/widgets/dialog_izin_notifikasi.dart';
 
 class LayarPilihPeran extends StatefulWidget {
   const LayarPilihPeran({super.key, this.koneksiAwalFuture});
@@ -26,6 +27,13 @@ class _LayarPilihPeranState extends State<LayarPilihPeran> {
     super.initState();
     _inisialisasiKoneksiServer();
     _tampilkanNotifikasiBeta();
+  }
+
+  /// Tampilkan dialog izin notifikasi untuk Android 13+
+  Future<void> _tampilkanDialogIzinNotifikasi() async {
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    if (!mounted) return;
+    await DialogIzinNotifikasi.tampilkan(context);
   }
 
   Future<void> _tampilkanNotifikasiBeta() async {
@@ -84,6 +92,10 @@ class _LayarPilihPeranState extends State<LayarPilihPeran> {
                 if (context.mounted) {
                   Navigator.pop(dialogContext);
                 }
+                // Tampilkan dialog izin notifikasi setelah dialog beta ditutup
+                if (mounted) {
+                  await _tampilkanDialogIzinNotifikasi();
+                }
               },
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
@@ -103,6 +115,9 @@ class _LayarPilihPeranState extends State<LayarPilihPeran> {
           ],
         ),
       );
+    } else {
+      // Jika dialog beta sudah pernah muncul, tampilkan dialog izin notifikasi saja
+      await _tampilkanDialogIzinNotifikasi();
     }
   }
 
