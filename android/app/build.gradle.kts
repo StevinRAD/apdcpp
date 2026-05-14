@@ -5,8 +5,8 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-apply(plugin = "com.google.gms.google-services")
-apply(plugin = "com.google.firebase.crashlytics")
+// apply(plugin = "com.google.gms.google-services")
+// apply(plugin = "com.google.firebase.crashlytics")
 // apply(plugin = "com.google.firebase.perf")
 
 dependencies {
