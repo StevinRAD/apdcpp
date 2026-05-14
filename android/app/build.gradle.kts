@@ -7,7 +7,7 @@ plugins {
 
 apply(plugin = "com.google.gms.google-services")
 apply(plugin = "com.google.firebase.crashlytics")
-apply(plugin = "com.google.firebase.perf")
+// apply(plugin = "com.google.firebase.perf")
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
