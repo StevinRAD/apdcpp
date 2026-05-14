@@ -1,3 +1,6 @@
 {
-    "java.configuration.updateBuildConfiguration": "interactive"
+    "java.configuration.updateBuildConfiguration": "interactive",
+    "terminal.integrated.env.windows": {
+        "PATH": "${env:PATH};C:\\Users\\ell\\AppData\\Local\\Kiro-Cli"
+    }
 }

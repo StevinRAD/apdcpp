@@ -37,14 +37,11 @@ class _LayarLoginKaryawanState extends State<LayarLoginKaryawan> {
       return;
     }
 
-    debugPrint('--- Memulai Proses Login Karyawan ---');
     setState(() => _sedangLoading = true);
 
     try {
-      debugPrint('Step 1: Cek koneksi server...');
       final koneksiTersedia = await _api.cekKoneksiServer().timeout(const Duration(seconds: 10));
       if (!koneksiTersedia) {
-        debugPrint('Koneksi server gagal.');
         if (!mounted) return;
         setState(() => _sedangLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -53,10 +50,8 @@ class _LayarLoginKaryawanState extends State<LayarLoginKaryawan> {
         return;
       }
 
-      debugPrint('Step 2: Mengambil Device ID...');
       final deviceId = await SingleDeviceSessionService.getDeviceId().timeout(const Duration(seconds: 5), onTimeout: () => '');
 
-      debugPrint('Step 3: Mengirim request login ke API...');
       final response = await _api.loginKaryawan(
         username: username,
         password: password,
@@ -64,7 +59,6 @@ class _LayarLoginKaryawanState extends State<LayarLoginKaryawan> {
         deviceName: 'Flutter App',
       ).timeout(const Duration(seconds: 20));
 
-      debugPrint('Step 4: Response diterima: ${response['status']}');
       if (!mounted) return;
 
       final pesanAsli = _api.message(response);
@@ -81,10 +75,8 @@ class _LayarLoginKaryawanState extends State<LayarLoginKaryawan> {
           deviceId: deviceId,
         );
 
-        // Penting: Tandai sesi valid di perangkat ini
         await SingleDeviceSessionService.simpanDeviceIdSesi(deviceId);
 
-        // Mulai listen notifikasi realtime
         await RealtimeNotifikasiService.instance.mulaiListenKaryawan(username);
 
         if (!mounted) return;
@@ -128,7 +120,6 @@ class _LayarLoginKaryawanState extends State<LayarLoginKaryawan> {
         );
       }
     } catch (e) {
-      debugPrint('Error Fatal Login: $e');
       if (!mounted) return;
       setState(() => _sedangLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(

@@ -52,7 +52,6 @@ class ApiApdService {
     return text.isEmpty ? fallback : text;
   }
 
-  /// Generate random session token untuk single device login
   String _generateSessionToken() {
     final random = math.Random.secure();
     final bytes = List<int>.generate(32, (_) => random.nextInt(256));
@@ -323,7 +322,6 @@ class ApiApdService {
         'tanggal': DateTime.now().toIso8601String(),
       });
     } catch (e) {
-      debugPrint('Notifikasi gagal dikirim: $e');
     }
   }
 
@@ -368,7 +366,6 @@ class ApiApdService {
       if (insertRows.isEmpty) return;
       await _supabase.from('notifikasi_karyawan').insert(insertRows);
     } catch (e) {
-      debugPrint('Notifikasi massal gagal dikirim: $e');
     }
   }
 
@@ -387,12 +384,8 @@ class ApiApdService {
           );
       return storagePath; // return merely the storage path
     } on StorageException catch (e) {
-      debugPrint(
-        'Upload storage error [bucket=uploads path=$pathFolder file=${p.basename(file.path)}]: ${e.message}',
-      );
       return null;
     } catch (e) {
-      debugPrint('Upload error: $e');
       return null;
     }
   }
@@ -402,9 +395,7 @@ class ApiApdService {
     try {
       final cleanPath = path.trim();
       await _supabase.storage.from('uploads').remove([cleanPath]);
-      debugPrint('Berhasil menghapus file dari storage: $cleanPath');
     } catch (e) {
-      debugPrint('Gagal menghapus file dari storage: $e');
     }
   }
 
@@ -453,14 +444,12 @@ class ApiApdService {
         return {'status': 'gagal', 'pesan': 'Username atau password salah'};
       }
 
-      debugPrint('Supabase: Mencari user $user di tabel karyawan...');
       final res = await _supabase
           .from('karyawan')
           .select()
           .eq('username', user)
           .maybeSingle()
           .timeout(const Duration(seconds: 15));
-      debugPrint('Supabase: Cek user selesai.');
 
       if (res == null) {
         return {'status': 'gagal', 'pesan': 'Username atau password salah'};
@@ -554,17 +543,13 @@ class ApiApdService {
         }
       }
 
-      debugPrint('Supabase: Mencoba update status login ke DB...');
       try {
         await _supabase
             .from('karyawan')
             .update(updateData)
             .eq('id', res['id'])
             .timeout(const Duration(seconds: 10));
-        debugPrint('Supabase: Update status login sukses.');
       } catch (e) {
-        debugPrint('Supabase Error: Gagal update status login (abaikan): $e');
-        // Tetap lanjut meskipun update status gagal, agar user tetap bisa masuk
       }
 
       // Ambil data karyawan yang sudah diupdate
@@ -577,7 +562,6 @@ class ApiApdService {
             .maybeSingle()
             .timeout(const Duration(seconds: 10));
       } catch (e) {
-        debugPrint('Peringatan: Gagal mengambil data terbaru karyawan: $e');
       }
 
       return {'status': 'sukses', 'pesan': 'Berhasil login', 'data': updatedRes ?? res};
@@ -599,14 +583,12 @@ class ApiApdService {
         return {'status': 'gagal', 'pesan': 'Username atau password salah'};
       }
 
-      debugPrint('Supabase: Mencari user $user di tabel admin...');
       final res = await _supabase
           .from('admin')
           .select()
           .eq('username', user)
           .maybeSingle()
           .timeout(const Duration(seconds: 15));
-      debugPrint('Supabase: Cek admin selesai.');
 
       if (res == null) {
         return {'status': 'gagal', 'pesan': 'Username atau password salah'};
@@ -692,17 +674,13 @@ class ApiApdService {
         }
       }
 
-      debugPrint('Supabase: Mencoba update status login admin ke DB...');
       try {
         await _supabase
             .from('admin')
             .update(updateData)
             .eq('id', res['id'])
             .timeout(const Duration(seconds: 10));
-        debugPrint('Supabase: Update status login admin sukses.');
       } catch (e) {
-        debugPrint('Supabase Error: Gagal update status login admin (abaikan): $e');
-        // Tetap lanjut meskipun update status gagal
       }
 
       // Ambil data admin yang sudah diupdate
@@ -715,7 +693,6 @@ class ApiApdService {
             .maybeSingle()
             .timeout(const Duration(seconds: 10));
       } catch (e) {
-        debugPrint('Peringatan: Gagal mengambil data terbaru admin: $e');
       }
 
       return {'status': 'sukses', 'pesan': 'Berhasil login', 'data': updatedRes ?? res};
@@ -1917,26 +1894,19 @@ class ApiApdService {
         };
       }
 
-      print('DEBUG: Karyawan ID: ${karyawan['id']}');
-
       // === GUNAKAN SISTEM BARU: dokumen_pengajuan_item ===
-      // Ambil semua item yang DITERIMA dari dokumen pengajuan karyawan
       final dokumenRes = await _supabase
           .from('dokumen_pengajuan')
           .select('id,tanggal_pengajuan')
           .eq('id_karyawan', karyawan['id']);
 
       final dokumenRows = _asMapList(dokumenRes);
-      print('DEBUG: Jumlah dokumen: ${dokumenRows.length}');
 
       final allItems = <Map<String, dynamic>>[];
 
-      // Ambil item dari setiap dokumen
       for (final dokumen in dokumenRows) {
         final idDokumen = _readText(dokumen['id']);
         final tglPengajuan = _readText(dokumen['tanggal_pengajuan']);
-
-        print('DEBUG: Proses dokumen $idDokumen');
 
         final items = await _supabase
             .from('dokumen_pengajuan_item')
@@ -1944,12 +1914,10 @@ class ApiApdService {
             .eq('id_pengajuan', idDokumen);
 
         final listItems = _asMapList(items);
-        print('DEBUG: Items dari dokumen $idDokumen: ${listItems.length}');
 
         final filteredItems = listItems.where((it) {
           final st = (it['status']?.toString() ?? '').toLowerCase();
           final isValid = st == 'diterima' || st == 'disetujui';
-          print('DEBUG: Item ${it['id']} status: $st, valid: $isValid');
           return isValid;
         }).map((it) {
           final mutableItem = Map<String, dynamic>.from(it);
@@ -1957,19 +1925,13 @@ class ApiApdService {
           return mutableItem;
         }).toList();
 
-        print('DEBUG: Items valid (diterima/disetujui): ${filteredItems.length}');
         allItems.addAll(filteredItems);
       }
 
-      print('DEBUG: Total allItems: ${allItems.length}');
-
-      // Ambil nama APD
       final apdIds = allItems
           .map((e) => _readText(e['id_apd']))
           .where((e) => e.isNotEmpty)
           .toSet();
-
-      print('DEBUG: APD IDs: $apdIds');
 
       final apdMap = await _loadMapByIds(
         table: 'apd',
@@ -1977,28 +1939,22 @@ class ApiApdService {
         selectColumns: 'id,nama_apd',
       );
 
-      print('DEBUG: APD Map: $apdMap');
-
       final mapped = allItems.map((item) {
         final apd = apdMap[_readText(item['id_apd'])];
         final result = <String, dynamic>{
-          'id_pengajuan': _readText(item['id']), // ID item
+          'id_pengajuan': _readText(item['id']),
           'nama_apd': _readText(apd?['nama_apd'], fallback: '-'),
-          'status_pengajuan': 'Disetujui', // Semua item di sini sudah diterima
+          'status_pengajuan': 'Disetujui',
           'tanggal_pengajuan': _readText(item['tanggal_pengajuan']),
         };
-        print('DEBUG: Mapped item: $result');
         return result;
       }).toList();
-
-      print('DEBUG: Final mapped rows: ${mapped.length}');
 
       return {
         'status': 'sukses',
         'data': {'rows': mapped},
       };
     } catch (e) {
-      print('DEBUG: Error in pengajuanKaryawanUntukLaporan: $e');
       return {'status': 'gagal', 'pesan': 'Gagal memuat data pengajuan: $e'};
     }
   }
@@ -2105,7 +2061,6 @@ class ApiApdService {
             return {'status': 'gagal', 'pesan': 'Gagal mengunggah foto laporan'};
           }
         } catch (e) {
-          debugPrint('Error uploading foto: $e');
           // Lanjutkan tanpa foto jika upload gagal
           fotoPath = null;
         }
@@ -2139,12 +2094,8 @@ class ApiApdService {
 
         // Handle column errors with fallbacks
         if (message.contains('column') || details.contains('column')) {
-          debugPrint('DEBUG: Column error detected: ${e.message}');
-          debugPrint('DEBUG: Error details: ${e.details}');
-
           // Coba hilangkan tanggal_laporan
           if (message.contains('tanggal_laporan') || details.contains('tanggal_laporan')) {
-            debugPrint('DEBUG: Retrying without tanggal_laporan');
             await _supabase.from('laporan_kendala').insert(payload);
             return {
               'status': 'sukses',
@@ -2154,7 +2105,6 @@ class ApiApdService {
 
           // Coba hilangkan id_pengajuan (kolom mungkin bernama id_item_pengajuan atau tidak ada)
           if (message.contains('id_pengajuan') || details.contains('id_pengajuan')) {
-            debugPrint('DEBUG: Retrying without id_pengajuan');
             final payloadTanpaPengajuan = Map<String, dynamic>.from(payload)
               ..remove('id_pengajuan');
             await _supabase.from('laporan_kendala').insert({
@@ -2172,7 +2122,6 @@ class ApiApdService {
           payloadDenganItemPengajuan.remove('id_pengajuan');
           payloadDenganItemPengajuan['id_item_pengajuan'] = idPengajuanRaw;
 
-          debugPrint('DEBUG: Retrying with id_item_pengajuan instead of id_pengajuan');
           try {
             await _supabase.from('laporan_kendala').insert({
               ...payloadDenganItemPengajuan,
@@ -2183,11 +2132,10 @@ class ApiApdService {
               'pesan': 'Laporan kendala berhasil dikirim ke admin',
             };
           } on PostgrestException catch (e2) {
-            debugPrint('DEBUG: id_item_pengajuan also failed: ${e2.message}');
+            // Fallback gagal, lanjut ke minimal insert
           }
 
           // Last resort: insert minimal data
-          debugPrint('DEBUG: Trying minimal insert (only required fields)');
           final minimalPayload = <String, dynamic>{
             'id_karyawan': karyawan['id'],
             'keterangan': keterangan.trim(),
@@ -2211,7 +2159,6 @@ class ApiApdService {
         'pesan': 'Laporan kendala berhasil dikirim ke admin',
       };
     } catch (e) {
-      debugPrint('Error in kirimLaporanKendala: $e');
       return {'status': 'gagal', 'pesan': 'Gagal mengirim laporan: $e'};
     }
   }
@@ -4317,11 +4264,6 @@ class ApiApdService {
         return {'status': 'gagal', 'pesan': 'Dokumen tidak ditemukan'};
       }
 
-      // Debug: Log tanggal dari database
-      print('DEBUG: Raw dokumen data keys: ${dokumen.keys.toList()}');
-      print('DEBUG: tanggal_pengajuan from db: ${dokumen['tanggal_pengajuan']}');
-      print('DEBUG: created_at from db: ${dokumen['created_at']}');
-
       // Ambil data karyawan
       final idKaryawan = _readText(dokumen['id_karyawan']);
       Map<String, dynamic> profilKaryawan = {};
@@ -4361,8 +4303,6 @@ class ApiApdService {
         // Last resort: gunakan current time
         tanggalPengajuanFinal = DateTime.now().toIso8601String();
       }
-
-      print('DEBUG: Final tanggal_pengajuan: $tanggalPengajuanFinal');
 
       final enrichedItems = <Map<String, dynamic>>[];
       for (final item in itemRows) {

@@ -96,8 +96,7 @@ class _DialogTutorialAplikasiState extends State<_DialogTutorialAplikasi> {
         _memuatSorotan = false;
       });
     } catch (error, stackTrace) {
-      debugPrint('Gagal menyiapkan sorotan tutorial: $error');
-      debugPrintStack(stackTrace: stackTrace);
+      // Gagal menyiapkan sorotan tutorial
       if (!mounted) return;
 
       setState(() {

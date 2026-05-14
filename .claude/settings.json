@@ -5,7 +5,9 @@
       "Bash(flutter analyze:*)",
       "Bash(flutter build:*)",
       "Bash(flutter clean:*)",
-      "Bash(./gradlew.bat --stop)"
+      "Bash(./gradlew.bat --stop)",
+      "Bash(git commit -m ' *)",
+      "Bash(git commit *)"
     ]
   }
 }

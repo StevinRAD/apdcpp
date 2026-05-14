@@ -44,9 +44,6 @@ class NotifikasiLokalService {
       initializationSettings,
       onDidReceiveNotificationResponse: (NotificationResponse response) {
         // Handle notification tap
-        if (kDebugMode) {
-          print('Notifikasi diklik: ${response.payload}');
-        }
       },
     );
 
@@ -61,9 +58,6 @@ class NotifikasiLokalService {
       // Android 13+ (API 33+) butuh izin POST_NOTIFICATIONS
       if (Platform.version.contains('33') || Platform.version.contains('34') || Platform.version.contains('35')) {
         final status = await Permission.notification.request();
-        if (kDebugMode) {
-          print('Status izin notifikasi Android: ${status.isGranted}');
-        }
         return status.isGranted;
       }
       // Android di bawah 13 tidak perlu izin

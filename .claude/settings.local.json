@@ -5,7 +5,16 @@
       "Bash(curl -s \"https://api.github.com/repos/StevinRAD/apdcpp/actions/runs/24357334376/jobs\")",
       "Bash(curl -s \"https://api.github.com/repos/StevinRAD/apdcpp/actions/runs?per_page=3\")",
       "Bash(curl -s \"https://api.github.com/repos/StevinRAD/apdcpp/actions/runs?per_page=2\")",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git push:*)",
+      "Bash(start cmd *)",
+      "Bash(gradlew.bat --stop)",
+      "Bash(git commit -m ' *)",
+      "Bash(git commit -m 'fix: update workflow with flutter upgrade untuk SDK compatibility *)",
+      "Bash(git commit -m 'feat: add dokumen pengajuan dan tanda tangan admin features *)",
+      "Bash(git commit -m 'feat: add preview dokumen penerimaan dan widget tanda tangan *)",
+      "Bash(git commit -m 'feat: add pdf/printing dependencies and update related files *)",
+      "Bash(git commit -m 'fix: remove unused field and update workflow to ignore info/warnings *)"
     ]
   }
 }

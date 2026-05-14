@@ -37,14 +37,11 @@ class _LayarLoginAdminState extends State<LayarLoginAdmin> {
       return;
     }
 
-    debugPrint('--- Memulai Proses Login Admin ---');
     setState(() => _sedangLoading = true);
 
     try {
-      debugPrint('Step 1: Cek koneksi server...');
       final koneksiTersedia = await _api.cekKoneksiServer().timeout(const Duration(seconds: 10));
       if (!koneksiTersedia) {
-        debugPrint('Koneksi server gagal.');
         if (!mounted) return;
         setState(() => _sedangLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -53,10 +50,8 @@ class _LayarLoginAdminState extends State<LayarLoginAdmin> {
         return;
       }
 
-      debugPrint('Step 2: Mengambil Device ID...');
       final deviceId = await SingleDeviceSessionService.getDeviceId().timeout(const Duration(seconds: 5), onTimeout: () => '');
 
-      debugPrint('Step 3: Mengirim request login ke API...');
       final response = await _api.loginAdmin(
         username: username,
         password: password,
@@ -64,7 +59,6 @@ class _LayarLoginAdminState extends State<LayarLoginAdmin> {
         deviceName: 'Flutter App',
       ).timeout(const Duration(seconds: 20));
 
-      debugPrint('Step 4: Response diterima: ${response['status']}');
       if (!mounted) return;
 
       if (_api.isSuccess(response)) {
@@ -107,7 +101,6 @@ class _LayarLoginAdminState extends State<LayarLoginAdmin> {
         );
       }
     } catch (e) {
-      debugPrint('Error Fatal Login: $e');
       if (!mounted) return;
       setState(() => _sedangLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(

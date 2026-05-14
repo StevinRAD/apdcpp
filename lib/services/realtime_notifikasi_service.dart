@@ -48,13 +48,7 @@ class RealtimeNotifikasiService {
       ).subscribe();
 
       _isListening = true;
-      if (kDebugMode) {
-        print('Realtime: Mulai listen untuk karyawan $username');
-      }
     } catch (e) {
-      if (kDebugMode) {
-        print('Error starting realtime for karyawan: $e');
-      }
     }
   }
 
@@ -90,13 +84,7 @@ class RealtimeNotifikasiService {
       ).subscribe();
 
       _isListening = true;
-      if (kDebugMode) {
-        print('Realtime: Mulai listen untuk admin $username');
-      }
     } catch (e) {
-      if (kDebugMode) {
-        print('Error starting realtime for admin: $e');
-      }
     }
   }
 
@@ -110,13 +98,7 @@ class RealtimeNotifikasiService {
       _isListening = false;
       _username = null;
       _peran = null;
-      if (kDebugMode) {
-        print('Realtime: Berhenti listen');
-      }
     } catch (e) {
-      if (kDebugMode) {
-        print('Error stopping realtime: $e');
-      }
     }
   }
 
@@ -130,9 +112,6 @@ class RealtimeNotifikasiService {
     // Hanya notifikasi jika status berubah
     if (newStatus == oldStatus) return;
 
-    if (kDebugMode) {
-      print('Pengajuan update: $oldStatus -> $newStatus');
-    }
 
     // Ambil detail pengajuan untuk notifikasi
     final idItem = payload.newRecord['id'];
@@ -182,9 +161,6 @@ class RealtimeNotifikasiService {
         soundType: 'persetujuan',
       );
     } catch (e) {
-      if (kDebugMode) {
-        print('Error handling pengajuan update: $e');
-      }
     }
   }
 
@@ -197,9 +173,6 @@ class RealtimeNotifikasiService {
 
     if (newStatus == oldStatus) return;
 
-    if (kDebugMode) {
-      print('Laporan kendala update: $oldStatus -> $newStatus');
-    }
 
     final namaApd = payload.newRecord['nama_apd']?.toString() ?? 'APD';
     final catatanAdmin = payload.newRecord['catatan_admin']?.toString();
@@ -254,9 +227,6 @@ class RealtimeNotifikasiService {
         jenisApd: 'Pengajuan Baru',
       );
     } catch (e) {
-      if (kDebugMode) {
-        print('Error handling pengajuan baru: $e');
-      }
     }
   }
 
@@ -283,9 +253,6 @@ class RealtimeNotifikasiService {
         soundType: 'peringatan',
       );
     } catch (e) {
-      if (kDebugMode) {
-        print('Error handling laporan kendala baru: $e');
-      }
     }
   }
 

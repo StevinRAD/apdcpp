@@ -452,7 +452,6 @@ class _LayarPengajuanDokumenApdState extends State<LayarPengajuanDokumenApd> {
           final fotoUrl = _api.supabase.storage.from('apd-images').getPublicUrl(fotoPath);
           alasanData['foto_bukti'] = fotoUrl;
         } catch (e) {
-          debugPrint('Gagal upload foto: $e');
           // Lanjutkan saja tanpa foto jika gagal upload
         }
       }
@@ -506,9 +505,6 @@ class _LayarPengajuanDokumenApdState extends State<LayarPengajuanDokumenApd> {
         ),
       );
 
-      // Debug: print error ke console
-      debugPrint('ERROR PENGIRIMAN PENGAJUAN: $pesanError');
-      debugPrint('RESPONSE LENGKAP: $response');
     }
   }
 

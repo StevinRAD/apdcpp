@@ -1340,12 +1340,8 @@ class _DetailDokumenSheetState extends State<_DetailDokumenSheet> {
               .toList() ??
           [];
 
-      // Debug: Cek apakah items memiliki tanggal_pengajuan
       if (items.isNotEmpty) {
         final firstItem = items.first;
-        print('DEBUG: First item keys: ${firstItem.keys.toList()}');
-        print('DEBUG: First item tanggal_pengajuan: ${firstItem['tanggal_pengajuan']}');
-        print('DEBUG: Dokumen tanggal_pengajuan: ${data['dokumen']['tanggal_pengajuan']}');
       }
 
       setState(() {
@@ -1364,13 +1360,6 @@ class _DetailDokumenSheetState extends State<_DetailDokumenSheet> {
             {};
         _items = items;
         _loading = false;
-
-        // Debug log
-        print('DEBUG UI: data keys: ${data.keys.toList()}');
-        print('DEBUG UI: data[dokumen] keys: ${dokumenData?.keys.toList()}');
-        print('DEBUG UI: _dokumen keys: ${_dokumen.keys.toList()}');
-        print('DEBUG UI: _dokumen tanggal_pengajuan: ${_dokumen['tanggal_pengajuan']}');
-        print('DEBUG UI: _formatTanggal result: ${_formatTanggal(_dokumen['tanggal_pengajuan']?.toString())}');
 
         // Inisialisasi status item dari data
         for (final item in items) {
