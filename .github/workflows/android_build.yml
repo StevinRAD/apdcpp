@@ -36,6 +36,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
+      - name: Create google-services.json
+        run: echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > android/app/google-services.json
+
       - name: Setup Gradle untuk build yang optimal
         run: |
           echo "org.gradle.jvmargs=-Xmx2048M -XX:MaxMetaspaceSize=512m" >> android/gradle.properties
